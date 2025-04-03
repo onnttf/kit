@@ -138,19 +138,18 @@ const (
 
 // Paginate returns a GORM scope function that applies pagination based on the given page and pageSize.
 func Paginate(page, pageSize int) func(db *gorm.DB) *gorm.DB {
-	// Ensure valid page number (default to 1 if invalid)
 	if page <= 0 {
 		page = 1
 	}
-	// Ensure valid pageSize (default to defaultPageSize if invalid, or cap to maxPageSize)
+
 	if pageSize <= 0 {
 		pageSize = defaultPageSize
 	} else if pageSize > maxPageSize {
 		pageSize = maxPageSize
 	}
-	// Calculate the offset based on page and pageSize
+
 	offset := (page - 1) * pageSize
-	// Return a GORM scope that applies pagination to the query
+
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Offset(offset).Limit(pageSize)
 	}
