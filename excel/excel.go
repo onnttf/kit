@@ -8,17 +8,15 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// IsExcel checks if a file is an Excel file based on its file name extension.
-// It returns true if the file name ends with ".xlsx" (case-insensitive), otherwise false.
+// IsExcel checks if a file is an Excel file based on its extension.
+// Returns true for ".xlsx" files (case-insensitive).
 func IsExcel(fileName string) bool {
 	return strings.HasSuffix(strings.ToLower(fileName), ".xlsx")
 }
 
 // ReadExcel reads data from an Excel file.
-// It takes an io.Reader representing the Excel file and a variable number of sheet names.
-// If no sheet names are provided, it reads data from all sheets in the file.
-// It returns a map where the keys are sheet names and the values are 2D string slices representing the sheet data,
-// or an error if the file cannot be opened or read.
+// It reads from specified sheets or all sheets if none specified.
+// Returns a map of sheet names to their data as 2D string slices.
 func ReadExcel(file io.Reader, sheetNames ...string) (map[string][][]string, error) {
 	workbook, err := excelize.OpenReader(file)
 	if err != nil {
@@ -26,13 +24,15 @@ func ReadExcel(file io.Reader, sheetNames ...string) (map[string][][]string, err
 	}
 	defer workbook.Close()
 
+	// If no sheets specified, read all sheets
 	if len(sheetNames) == 0 {
 		sheetNames = workbook.GetSheetList()
 	}
 
-	sheetData := make(map[string][][]string)
+	// Process each requested sheet
+	sheetData := make(map[string][][]string, len(sheetNames))
 	for _, sheetName := range sheetNames {
-		data, err := readSheetData(workbook, sheetName)
+		data, err := extractSheetData(workbook, sheetName)
 		if err != nil {
 			return nil, err
 		}
@@ -42,10 +42,8 @@ func ReadExcel(file io.Reader, sheetNames ...string) (map[string][][]string, err
 	return sheetData, nil
 }
 
-// ReadExcelSheet reads data from a specific sheet in an Excel file.
-// It takes an io.Reader representing the Excel file and the name of the sheet to read.
-// It returns a 2D string slice representing the sheet data,
-// or an error if the file cannot be opened or the sheet cannot be read.
+// ReadExcelSheet reads data from a single Excel sheet.
+// Returns the sheet data as a 2D string slice.
 func ReadExcelSheet(file io.Reader, sheetName string) ([][]string, error) {
 	workbook, err := excelize.OpenReader(file)
 	if err != nil {
@@ -53,31 +51,30 @@ func ReadExcelSheet(file io.Reader, sheetName string) ([][]string, error) {
 	}
 	defer workbook.Close()
 
-	return readSheetData(workbook, sheetName)
+	return extractSheetData(workbook, sheetName)
 }
 
-// readSheetData reads data from a specific sheet in an Excel workbook.
-// It takes an excelize.File pointer and the sheet name.
-// It retrieves all rows from the sheet, filters out empty rows, and returns the valid rows as a 2D string slice.
-// It returns an error if the rows cannot be read.
-func readSheetData(workbook *excelize.File, sheetName string) ([][]string, error) {
+// extractSheetData retrieves and cleans data from a specific sheet.
+// Returns non-empty rows as a 2D string slice.
+func extractSheetData(workbook *excelize.File, sheetName string) ([][]string, error) {
 	rows, err := workbook.GetRows(sheetName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read rows from sheet %s: %w", sheetName, err)
 	}
 
-	var validRows [][]string
+	// Filter out empty rows
+	var nonEmptyRows [][]string
 	for _, row := range rows {
-		if isRowEmpty(row) {
-			continue
+		if !isRowEmpty(row) {
+			nonEmptyRows = append(nonEmptyRows, row)
 		}
-		validRows = append(validRows, row)
 	}
-	return validRows, nil
+
+	return nonEmptyRows, nil
 }
 
-// isRowEmpty checks if a row in an Excel sheet is empty.
-// It iterates through the cells in the row and returns true if all cells are empty or contain only whitespace, otherwise false.
+// isRowEmpty checks if a row contains only empty cells.
+// Returns true if all cells are empty or whitespace-only.
 func isRowEmpty(row []string) bool {
 	for _, cell := range row {
 		if strings.TrimSpace(cell) != "" {
