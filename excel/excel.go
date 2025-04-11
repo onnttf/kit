@@ -61,25 +61,5 @@ func extractSheetData(workbook *excelize.File, sheetName string) ([][]string, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to read rows from sheet %s: %w", sheetName, err)
 	}
-
-	// Filter out empty rows
-	var nonEmptyRows [][]string
-	for _, row := range rows {
-		if !isRowEmpty(row) {
-			nonEmptyRows = append(nonEmptyRows, row)
-		}
-	}
-
-	return nonEmptyRows, nil
-}
-
-// isRowEmpty checks if a row contains only empty cells.
-// Returns true if all cells are empty or whitespace-only.
-func isRowEmpty(row []string) bool {
-	for _, cell := range row {
-		if strings.TrimSpace(cell) != "" {
-			return false
-		}
-	}
-	return true
+	return rows, nil
 }
