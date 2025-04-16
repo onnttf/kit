@@ -25,8 +25,8 @@ type Repository[T any] interface {
 	// FindOne retrieves a single record based on the provided conditions.
 	FindOne(ctx context.Context, db *gorm.DB, conditions ...func(db *gorm.DB) *gorm.DB) (*T, error)
 
-	// FindMany retrieves multiple records based on the provided conditions.
-	FindMany(ctx context.Context, db *gorm.DB, conditions ...func(db *gorm.DB) *gorm.DB) ([]T, error)
+	// Find retrieves multiple records based on the provided conditions.
+	Find(ctx context.Context, db *gorm.DB, conditions ...func(db *gorm.DB) *gorm.DB) ([]T, error)
 
 	// Count returns the number of records that match the provided conditions.
 	Count(ctx context.Context, db *gorm.DB, conditions ...func(db *gorm.DB) *gorm.DB) (int64, error)
@@ -141,8 +141,8 @@ func (r *Repo[T]) FindOne(ctx context.Context, db *gorm.DB, conditions ...func(d
 	return &record, nil
 }
 
-// FindMany retrieves multiple records based on the provided conditions.
-func (r *Repo[T]) FindMany(ctx context.Context, db *gorm.DB, conditions ...func(db *gorm.DB) *gorm.DB) ([]T, error) {
+// Find retrieves multiple records based on the provided conditions.
+func (r *Repo[T]) Find(ctx context.Context, db *gorm.DB, conditions ...func(db *gorm.DB) *gorm.DB) ([]T, error) {
 	var records []T
 	result := db.WithContext(ctx).Scopes(conditions...).Find(&records)
 
