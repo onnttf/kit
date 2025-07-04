@@ -11,10 +11,6 @@ go.work.sum
 # Editor
 .vscode/
 .idea/
-*.swp
-*.swo
-*.un~
-*~
 
 # OS
 .DS_Store
