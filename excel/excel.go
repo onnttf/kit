@@ -8,15 +8,12 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// IsExcel checks if a file is an Excel file based on its extension.
-// Returns true for ".xlsx" files (case-insensitive).
+// IsExcel returns true if the file has a case-insensitive ".xlsx" extension
 func IsExcel(fileName string) bool {
 	return strings.HasSuffix(strings.ToLower(fileName), ".xlsx")
 }
 
-// ReadExcel reads data from an Excel file.
-// It reads from specified sheets or all sheets if none specified.
-// Returns a map of sheet names to their data as 2D string slices.
+// ReadExcel returns row data from specified Excel sheets or all sheets if none specified, as a map of sheet names to 2D string slices
 func ReadExcel(file io.Reader, sheetNames ...string) (map[string][][]string, error) {
 	workbook, err := excelize.OpenReader(file)
 	if err != nil {
@@ -42,8 +39,7 @@ func ReadExcel(file io.Reader, sheetNames ...string) (map[string][][]string, err
 	return sheetData, nil
 }
 
-// ReadExcelSheet reads data from a single Excel sheet.
-// Returns the sheet data as a 2D string slice.
+// ReadExcelSheet returns row data from a single Excel sheet as a 2D string slice
 func ReadExcelSheet(file io.Reader, sheetName string) ([][]string, error) {
 	workbook, err := excelize.OpenReader(file)
 	if err != nil {
@@ -54,8 +50,7 @@ func ReadExcelSheet(file io.Reader, sheetName string) ([][]string, error) {
 	return extractSheetData(workbook, sheetName)
 }
 
-// extractSheetData retrieves and cleans data from a specific sheet.
-// Returns non-empty rows as a 2D string slice.
+// extractSheetData retrieves row data from a specific Excel sheet as a 2D string slice
 func extractSheetData(workbook *excelize.File, sheetName string) ([][]string, error) {
 	rows, err := workbook.GetRows(sheetName)
 	if err != nil {
