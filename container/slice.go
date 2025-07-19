@@ -1,6 +1,6 @@
 package container
 
-// Difference returns the elements in sliceA that are not in sliceB.
+// Difference returns elements in sliceA that are not present in sliceB
 func Difference[T comparable](sliceA, sliceB []T) []T {
 	result := make([]T, 0)
 	lookup := make(map[T]struct{}, len(sliceB))
@@ -18,7 +18,7 @@ func Difference[T comparable](sliceA, sliceB []T) []T {
 	return result
 }
 
-// Intersection returns the elements present in both sliceA and sliceB.
+// Intersection returns elements common to both sliceA and sliceB, preserving uniqueness
 func Intersection[T comparable](sliceA, sliceB []T) []T {
 	result := make([]T, 0)
 	lookup := make(map[T]struct{}, len(sliceB))
@@ -40,7 +40,7 @@ func Intersection[T comparable](sliceA, sliceB []T) []T {
 	return result
 }
 
-// Union returns all distinct elements from sliceA and sliceB.
+// Union returns all unique elements from sliceA and sliceB, preserving the order of first occurrence
 func Union[T comparable](sliceA, sliceB []T) []T {
 	result := make([]T, 0)
 	seen := make(map[T]struct{}, len(sliceA)+len(sliceB))
@@ -62,8 +62,7 @@ func Union[T comparable](sliceA, sliceB []T) []T {
 	return result
 }
 
-// Deduplicate returns a slice containing unique elements from input.
-// It preserves the order of the first occurrence.
+// Deduplicate returns unique elements from the input slice, preserving the order of first occurrence
 func Deduplicate[T comparable](input []T) []T {
 	if len(input) == 0 {
 		return nil
@@ -82,8 +81,7 @@ func Deduplicate[T comparable](input []T) []T {
 	return result
 }
 
-// ToMap returns a map constructed from input using keySelector to generate keys.
-// If duplicate keys are produced, the last value is retained.
+// ToMap returns a map of elements from the input slice, using keySelector to generate keys, retaining the last value for duplicate keys
 func ToMap[T any, K comparable](input []T, keySelector func(T) K) map[K]T {
 	result := make(map[K]T, len(input))
 

@@ -6,13 +6,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// Pagination constants
+// Pagination constants define the default and maximum number of records per page
 const (
-	DefaultPageSize = 10  // Default number of items per page
-	MaxPageSize     = 100 // Maximum allowed items per page
+	DefaultPageSize = 10  // Default number of records per page
+	MaxPageSize     = 100 // Maximum allowed records per page
 )
 
-// Paginate returns a GORM scope function that applies pagination.
+// Paginate returns a scope function that applies pagination to a query using offset and limit, normalizing page and page size
 func Paginate(page, pageSize int) func(db *gorm.DB) *gorm.DB {
 	// Normalize page number
 	if page <= 0 {
@@ -34,14 +34,14 @@ func Paginate(page, pageSize int) func(db *gorm.DB) *gorm.DB {
 	}
 }
 
-// Condition returns a GORM scope function that adds a 'where' condition.
+// Condition returns a scope function that filters a query with a WHERE clause for the specified column and value
 func Condition(column string, value interface{}) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(column, value)
 	}
 }
 
-// OrderBy returns a GORM scope function that orders the results by the specified field and direction.
+// OrderBy returns a scope function that sorts query results by the specified field in ascending or descending order
 func OrderBy(field string, direction string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		switch strings.ToLower(direction) {
@@ -55,21 +55,21 @@ func OrderBy(field string, direction string) func(db *gorm.DB) *gorm.DB {
 	}
 }
 
-// Limit returns a GORM scope function that limits the number of results.
+// Limit returns a scope function that restricts the number of records returned by a query
 func Limit(limit int) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Limit(limit)
 	}
 }
 
-// LikeCondition returns a GORM scope function that adds a 'where like' condition.
+// LikeCondition returns a scope function that filters a query with a LIKE clause using wildcard matching
 func LikeCondition(column string, value string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(column+" LIKE ?", "%"+value+"%")
 	}
 }
 
-// SelectFields returns a GORM scope function that specifies the fields to select.
+// SelectFields returns a scope function that specifies the fields to include in query results
 func SelectFields(fields ...string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Select(fields)
