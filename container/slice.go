@@ -92,3 +92,13 @@ func ToMap[T any, K comparable](input []T, keySelector func(T) K) map[K]T {
 
 	return result
 }
+
+// Contains checks if an element exists in a slice
+func Contains[T comparable](slice []T, element T) bool {
+	for _, item := range slice {
+		if item == element {
+			return true
+		}
+	}
+	return false
+}
