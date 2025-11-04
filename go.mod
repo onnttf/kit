@@ -1,13 +1,11 @@
 module github.com/onnttf/kit
 
-go 1.23.10
+go 1.23.12
 
 require (
 	github.com/xuri/excelize/v2 v2.9.0
 	gorm.io/gorm v1.25.12
 )
-
-require github.com/stretchr/testify v1.10.0 // indirect
 
 require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
