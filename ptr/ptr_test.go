@@ -4,18 +4,16 @@ import (
 	"testing"
 )
 
-// =============================================================================
-// Test Suite for PtrOf Function
-// =============================================================================
+// Test Suite for To Function
 
-// TestPtrOf_BasicTypes verifies PtrOf works correctly with basic data types
-func TestPtrOf_BasicTypes(t *testing.T) {
+// TestTo_BasicTypes verifies To works correctly with basic data types
+func TestTo_BasicTypes(t *testing.T) {
 	// Test with string
 	originalString := "hello"
-	stringPtr := PtrOf(originalString)
+	stringPtr := To(originalString)
 
 	if stringPtr == nil {
-		t.Error("Expected PtrOf to return non-nil pointer for string")
+		t.Error("Expected To to return non-nil pointer for string")
 		return
 	}
 
@@ -25,10 +23,10 @@ func TestPtrOf_BasicTypes(t *testing.T) {
 
 	// Test with integer
 	originalInt := 42
-	intPtr := PtrOf(originalInt)
+	intPtr := To(originalInt)
 
 	if intPtr == nil {
-		t.Error("Expected PtrOf to return non-nil pointer for int")
+		t.Error("Expected To to return non-nil pointer for int")
 		return
 	}
 
@@ -38,10 +36,10 @@ func TestPtrOf_BasicTypes(t *testing.T) {
 
 	// Test with boolean
 	originalBool := true
-	boolPtr := PtrOf(originalBool)
+	boolPtr := To(originalBool)
 
 	if boolPtr == nil {
-		t.Error("Expected PtrOf to return non-nil pointer for bool")
+		t.Error("Expected To to return non-nil pointer for bool")
 		return
 	}
 
@@ -50,15 +48,15 @@ func TestPtrOf_BasicTypes(t *testing.T) {
 	}
 }
 
-// TestPtrOf_PointerStability ensures the returned pointer is stable and independent
-func TestPtrOf_PointerStability(t *testing.T) {
+// TestTo_PointerStability ensures the returned pointer is stable and independent
+func TestTo_PointerStability(t *testing.T) {
 	originalValue := "test"
-	ptr1 := PtrOf(originalValue)
-	ptr2 := PtrOf(originalValue)
+	ptr1 := To(originalValue)
+	ptr2 := To(originalValue)
 
 	// Each call should return a different pointer address
 	if ptr1 == ptr2 {
-		t.Error("Expected different pointer addresses for separate PtrOf calls")
+		t.Error("Expected different pointer addresses for separate To calls")
 	}
 
 	// But both should contain the same value
@@ -67,113 +65,109 @@ func TestPtrOf_PointerStability(t *testing.T) {
 	}
 }
 
-// TestPtrOf_ZeroValues verifies PtrOf handles zero values correctly
-func TestPtrOf_ZeroValues(t *testing.T) {
+// TestTo_ZeroValues verifies To handles zero values correctly
+func TestTo_ZeroValues(t *testing.T) {
 	// Test with zero string
-	emptyStringPtr := PtrOf("")
+	emptyStringPtr := To("")
 	if emptyStringPtr == nil {
-		t.Error("Expected PtrOf to return non-nil pointer for empty string")
+		t.Error("Expected To to return non-nil pointer for empty string")
 		return
 	}
 	if *emptyStringPtr != "" {
-		t.Error("Expected PtrOf to handle empty string correctly")
+		t.Error("Expected To to handle empty string correctly")
 	}
 
 	// Test with zero int
-	zeroIntPtr := PtrOf(0)
+	zeroIntPtr := To(0)
 	if zeroIntPtr == nil {
-		t.Error("Expected PtrOf to return non-nil pointer for zero int")
+		t.Error("Expected To to return non-nil pointer for zero int")
 		return
 	}
 	if *zeroIntPtr != 0 {
-		t.Error("Expected PtrOf to handle zero int correctly")
+		t.Error("Expected To to handle zero int correctly")
 	}
 
 	// Test with zero bool
-	falseBoolPtr := PtrOf(false)
+	falseBoolPtr := To(false)
 	if falseBoolPtr == nil {
-		t.Error("Expected PtrOf to return non-nil pointer for false bool")
+		t.Error("Expected To to return non-nil pointer for false bool")
 		return
 	}
 	if *falseBoolPtr != false {
-		t.Error("Expected PtrOf to handle false bool correctly")
+		t.Error("Expected To to handle false bool correctly")
 	}
 }
 
-// =============================================================================
-// Test Suite for ValueOf Function
-// =============================================================================
+// Test Suite for DerefOr Function
 
-// TestValueOf_ValidPointer tests ValueOf with valid non-nil pointers
-func TestValueOf_ValidPointer(t *testing.T) {
+// TestDerefOr_ValidPointer tests DerefOr with valid non-nil pointers
+func TestDerefOr_ValidPointer(t *testing.T) {
 	// Test with string pointer
 	originalString := "hello world"
-	stringPtr := PtrOf(originalString)
-	result := ValueOf(stringPtr, "default")
+	stringPtr := To(originalString)
+	result := DerefOr(stringPtr, "default")
 
 	if result != originalString {
-		t.Errorf("Expected ValueOf to return %q, got %q", originalString, result)
+		t.Errorf("Expected DerefOr to return %q, got %q", originalString, result)
 	}
 
 	// Test with integer pointer
 	originalInt := 100
-	intPtr := PtrOf(originalInt)
-	result2 := ValueOf(intPtr, 0)
+	intPtr := To(originalInt)
+	result2 := DerefOr(intPtr, 0)
 
 	if result2 != originalInt {
-		t.Errorf("Expected ValueOf to return %d, got %d", originalInt, result2)
+		t.Errorf("Expected DerefOr to return %d, got %d", originalInt, result2)
 	}
 }
 
-// TestValueOf_NilPointer tests ValueOf behavior with nil pointers
-func TestValueOf_NilPointer(t *testing.T) {
+// TestDerefOr_NilPointer tests DerefOr behavior with nil pointers
+func TestDerefOr_NilPointer(t *testing.T) {
 	// Test with nil string pointer
 	var nilStringPtr *string
 	defaultString := "default value"
-	result := ValueOf(nilStringPtr, defaultString)
+	result := DerefOr(nilStringPtr, defaultString)
 
 	if result != defaultString {
-		t.Errorf("Expected ValueOf to return default %q, got %q", defaultString, result)
+		t.Errorf("Expected DerefOr to return default %q, got %q", defaultString, result)
 	}
 
 	// Test with nil integer pointer
 	var nilIntPtr *int
 	defaultInt := 42
-	result2 := ValueOf(nilIntPtr, defaultInt)
+	result2 := DerefOr(nilIntPtr, defaultInt)
 
 	if result2 != defaultInt {
-		t.Errorf("Expected ValueOf to return default %d, got %d", defaultInt, result2)
+		t.Errorf("Expected DerefOr to return default %d, got %d", defaultInt, result2)
 	}
 }
 
-// TestValueOf_DifferentDefaultValues ensures default values are returned correctly
-func TestValueOf_DifferentDefaultValues(t *testing.T) {
+// TestDerefOr_DifferentDefaultValues ensures default values are returned correctly
+func TestDerefOr_DifferentDefaultValues(t *testing.T) {
 	var nilPtr *string
 
 	// Test with empty string default
-	result1 := ValueOf(nilPtr, "")
+	result1 := DerefOr(nilPtr, "")
 	if result1 != "" {
 		t.Errorf("Expected empty string default, got %q", result1)
 	}
 
 	// Test with non-empty string default
-	result2 := ValueOf(nilPtr, "fallback")
+	result2 := DerefOr(nilPtr, "fallback")
 	if result2 != "fallback" {
 		t.Errorf("Expected 'fallback' default, got %q", result2)
 	}
 }
 
-// =============================================================================
-// Test Suite for PtrIf Function
-// =============================================================================
+// Test Suite for ToIf Function
 
-// TestPtrIf_TrueCondition tests PtrIf when condition is true
-func TestPtrIf_TrueCondition(t *testing.T) {
+// TestToIf_TrueCondition tests ToIf when condition is true
+func TestToIf_TrueCondition(t *testing.T) {
 	value := "conditional value"
-	result := PtrIf(true, value)
+	result := ToIf(true, value)
 
 	if result == nil {
-		t.Error("Expected PtrIf to return non-nil pointer when condition is true")
+		t.Error("Expected ToIf to return non-nil pointer when condition is true")
 		return
 	}
 
@@ -182,21 +176,21 @@ func TestPtrIf_TrueCondition(t *testing.T) {
 	}
 }
 
-// TestPtrIf_FalseCondition tests PtrIf when condition is false
-func TestPtrIf_FalseCondition(t *testing.T) {
+// TestToIf_FalseCondition tests ToIf when condition is false
+func TestToIf_FalseCondition(t *testing.T) {
 	value := "should not be used"
-	result := PtrIf(false, value)
+	result := ToIf(false, value)
 
 	if result != nil {
-		t.Error("Expected PtrIf to return nil when condition is false")
+		t.Error("Expected ToIf to return nil when condition is false")
 	}
 }
 
-// TestPtrIf_ConditionalLogic tests PtrIf with realistic conditional scenarios
-func TestPtrIf_ConditionalLogic(t *testing.T) {
+// TestToIf_ConditionalLogic tests ToIf with realistic conditional scenarios
+func TestToIf_ConditionalLogic(t *testing.T) {
 	// Test with non-empty string condition
 	userName := "Alice"
-	userPtr := PtrIf(userName != "", userName)
+	userPtr := ToIf(userName != "", userName)
 
 	if userPtr == nil {
 		t.Error("Expected non-nil pointer for non-empty username")
@@ -209,7 +203,7 @@ func TestPtrIf_ConditionalLogic(t *testing.T) {
 
 	// Test with empty string condition
 	emptyName := ""
-	emptyPtr := PtrIf(emptyName != "", emptyName)
+	emptyPtr := ToIf(emptyName != "", emptyName)
 
 	if emptyPtr != nil {
 		t.Error("Expected nil pointer for empty username condition")
@@ -217,7 +211,7 @@ func TestPtrIf_ConditionalLogic(t *testing.T) {
 
 	// Test with numeric condition
 	score := 85
-	scorePtr := PtrIf(score > 80, score)
+	scorePtr := ToIf(score > 80, score)
 
 	if scorePtr == nil {
 		t.Error("Expected non-nil pointer for score > 80")
@@ -229,9 +223,7 @@ func TestPtrIf_ConditionalLogic(t *testing.T) {
 	}
 }
 
-// =============================================================================
 // Test Suite for IsNil Function
-// =============================================================================
 
 // TestIsNil_WithNilPointer tests IsNil with nil pointers
 func TestIsNil_WithNilPointer(t *testing.T) {
@@ -254,9 +246,9 @@ func TestIsNil_WithNilPointer(t *testing.T) {
 
 // TestIsNil_WithValidPointer tests IsNil with valid pointers
 func TestIsNil_WithValidPointer(t *testing.T) {
-	stringPtr := PtrOf("test")
-	intPtr := PtrOf(42)
-	boolPtr := PtrOf(true)
+	stringPtr := To("test")
+	intPtr := To(42)
+	boolPtr := To(true)
 
 	if IsNil(stringPtr) {
 		t.Error("Expected IsNil to return false for valid string pointer")
@@ -271,15 +263,13 @@ func TestIsNil_WithValidPointer(t *testing.T) {
 	}
 }
 
-// =============================================================================
 // Test Suite for IsNotNil Function
-// =============================================================================
 
 // TestIsNotNil_WithValidPointer tests IsNotNil with valid pointers
 func TestIsNotNil_WithValidPointer(t *testing.T) {
-	stringPtr := PtrOf("test")
-	intPtr := PtrOf(42)
-	boolPtr := PtrOf(false)
+	stringPtr := To("test")
+	intPtr := To(42)
+	boolPtr := To(false)
 
 	if !IsNotNil(stringPtr) {
 		t.Error("Expected IsNotNil to return true for valid string pointer")
@@ -313,16 +303,14 @@ func TestIsNotNil_WithNilPointer(t *testing.T) {
 	}
 }
 
-// =============================================================================
-// Test Suite for ZeroPtr Function
-// =============================================================================
+// Test Suite for Zero Function
 
-// TestZeroPtr_BasicTypes tests ZeroPtr with basic types
-func TestZeroPtr_BasicTypes(t *testing.T) {
+// TestZero_BasicTypes tests Zero with basic types
+func TestZero_BasicTypes(t *testing.T) {
 	// Test with int
-	intZeroPtr := ZeroPtr[int]()
+	intZeroPtr := Zero[int]()
 	if intZeroPtr == nil {
-		t.Error("Expected ZeroPtr to return non-nil pointer for int")
+		t.Error("Expected Zero to return non-nil pointer for int")
 		return
 	}
 
@@ -331,9 +319,9 @@ func TestZeroPtr_BasicTypes(t *testing.T) {
 	}
 
 	// Test with string
-	stringZeroPtr := ZeroPtr[string]()
+	stringZeroPtr := Zero[string]()
 	if stringZeroPtr == nil {
-		t.Error("Expected ZeroPtr to return non-nil pointer for string")
+		t.Error("Expected Zero to return non-nil pointer for string")
 		return
 	}
 
@@ -342,9 +330,9 @@ func TestZeroPtr_BasicTypes(t *testing.T) {
 	}
 
 	// Test with bool
-	boolZeroPtr := ZeroPtr[bool]()
+	boolZeroPtr := Zero[bool]()
 	if boolZeroPtr == nil {
-		t.Error("Expected ZeroPtr to return non-nil pointer for bool")
+		t.Error("Expected Zero to return non-nil pointer for bool")
 		return
 	}
 
@@ -353,14 +341,14 @@ func TestZeroPtr_BasicTypes(t *testing.T) {
 	}
 }
 
-// TestZeroPtr_PointerIndependence ensures each ZeroPtr call returns independent pointers
-func TestZeroPtr_PointerIndependence(t *testing.T) {
-	ptr1 := ZeroPtr[int]()
-	ptr2 := ZeroPtr[int]()
+// TestZero_PointerIndependence ensures each Zero call returns independent pointers
+func TestZero_PointerIndependence(t *testing.T) {
+	ptr1 := Zero[int]()
+	ptr2 := Zero[int]()
 
 	// Should be different pointer addresses
 	if ptr1 == ptr2 {
-		t.Error("Expected different pointer addresses for separate ZeroPtr calls")
+		t.Error("Expected different pointer addresses for separate Zero calls")
 	}
 
 	// But both should point to zero values
@@ -375,9 +363,7 @@ func TestZeroPtr_PointerIndependence(t *testing.T) {
 	}
 }
 
-// =============================================================================
 // Integration and Edge Case Tests
-// =============================================================================
 
 // TestIntegration_WorkflowExample demonstrates typical usage patterns
 func TestIntegration_WorkflowExample(t *testing.T) {
@@ -395,8 +381,8 @@ func TestIntegration_WorkflowExample(t *testing.T) {
 
 	user := User{
 		Name:  userName,
-		Email: PtrIf(userEmail != "", userEmail),
-		Age:   PtrIf(userAge > 0, userAge),
+		Email: ToIf(userEmail != "", userEmail),
+		Age:   ToIf(userAge > 0, userAge),
 	}
 
 	// Verify the user was created correctly
@@ -409,8 +395,8 @@ func TestIntegration_WorkflowExample(t *testing.T) {
 		return
 	}
 
-	if ValueOf(user.Email, "") != userEmail {
-		t.Errorf("Expected email %q, got %q", userEmail, ValueOf(user.Email, ""))
+	if DerefOr(user.Email, "") != userEmail {
+		t.Errorf("Expected email %q, got %q", userEmail, DerefOr(user.Email, ""))
 	}
 
 	if IsNil(user.Age) {
@@ -418,8 +404,8 @@ func TestIntegration_WorkflowExample(t *testing.T) {
 		return
 	}
 
-	if ValueOf(user.Age, 0) != userAge {
-		t.Errorf("Expected age %d, got %d", userAge, ValueOf(user.Age, 0))
+	if DerefOr(user.Age, 0) != userAge {
+		t.Errorf("Expected age %d, got %d", userAge, DerefOr(user.Age, 0))
 	}
 }
 
@@ -427,28 +413,28 @@ func TestIntegration_WorkflowExample(t *testing.T) {
 func TestEdgeCases_ComplexTypes(t *testing.T) {
 	// Test with slice
 	originalSlice := []int{1, 2, 3}
-	slicePtr := PtrOf(originalSlice)
+	slicePtr := To(originalSlice)
 
 	if IsNil(slicePtr) {
 		t.Error("Expected non-nil slice pointer")
 		return
 	}
 
-	retrievedSlice := ValueOf(slicePtr, []int{})
+	retrievedSlice := DerefOr(slicePtr, []int{})
 	if len(retrievedSlice) != len(originalSlice) {
 		t.Errorf("Expected slice length %d, got %d", len(originalSlice), len(retrievedSlice))
 	}
 
 	// Test with map
 	originalMap := map[string]int{"key": 42}
-	mapPtr := PtrOf(originalMap)
+	mapPtr := To(originalMap)
 
 	if IsNil(mapPtr) {
 		t.Error("Expected non-nil map pointer")
 		return
 	}
 
-	retrievedMap := ValueOf(mapPtr, map[string]int{})
+	retrievedMap := DerefOr(mapPtr, map[string]int{})
 	if retrievedMap["key"] != 42 {
 		t.Errorf("Expected map value 42, got %d", retrievedMap["key"])
 	}
@@ -457,7 +443,7 @@ func TestEdgeCases_ComplexTypes(t *testing.T) {
 // TestEdgeCases_NilComparison tests nil comparison functions consistency
 func TestEdgeCases_NilComparison(t *testing.T) {
 	var nilPtr *string
-	validPtr := PtrOf("test")
+	validPtr := To("test")
 
 	// Test that IsNil and IsNotNil are logical opposites
 	if IsNil(nilPtr) == IsNotNil(nilPtr) {

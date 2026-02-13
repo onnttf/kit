@@ -8,16 +8,16 @@ import (
 
 func newNodes() []*Node {
 	return []*Node{
-		{NodeKey: "1", ParentNodeKey: "1", Sort: 1}, // root
-		{NodeKey: "2", ParentNodeKey: "1", Sort: 2},
-		{NodeKey: "3", ParentNodeKey: "2", Sort: 1},
-		{NodeKey: "4", ParentNodeKey: "2", Sort: 2},
-		{NodeKey: "5", ParentNodeKey: "1", Sort: 3},
+		{Key: "1", ParentKey: "1", Sort: 1}, // root
+		{Key: "2", ParentKey: "1", Sort: 2},
+		{Key: "3", ParentKey: "2", Sort: 1},
+		{Key: "4", ParentKey: "2", Sort: 2},
+		{Key: "5", ParentKey: "1", Sort: 3},
 	}
 }
 
 func TestBuildWithNodes(t *testing.T) {
-	tb := NewTreeBuilder().WithNodes(newNodes())
+	tb := NewBuilder().WithNodes(newNodes())
 	nodeMap, roots := tb.Build()
 
 	if len(roots) != 1 {
@@ -32,7 +32,7 @@ func TestBuildWithNodes(t *testing.T) {
 }
 
 func TestAddNodeAndBuild(t *testing.T) {
-	tb := NewTreeBuilder()
+	tb := NewBuilder()
 	tb.AddNode("1", "1", 1).AddNode("2", "1", 2).AddNode("3", "2", 3)
 	nodeMap, roots := tb.Build()
 
@@ -48,11 +48,11 @@ func TestAddNodeAndBuild(t *testing.T) {
 }
 
 func TestMoveNode(t *testing.T) {
-	tb := NewTreeBuilder().WithNodes(newNodes())
+	tb := NewBuilder().WithNodes(newNodes())
 	tb.MoveNode("5", "2")
 	nodeMap, _ := tb.Build()
 
-	if nodeMap["5"].ParentNodeKey != "2" {
+	if nodeMap["5"].ParentKey != "2" {
 		t.Error("node 5 parent not updated")
 	}
 	if len(nodeMap["1"].Children) != 1 {
@@ -64,7 +64,7 @@ func TestMoveNode(t *testing.T) {
 }
 
 func TestRemoveNode(t *testing.T) {
-	tb := NewTreeBuilder().WithNodes(newNodes())
+	tb := NewBuilder().WithNodes(newNodes())
 	tb.RemoveNode("2")
 	nodeMap, _ := tb.Build()
 
@@ -77,7 +77,7 @@ func TestRemoveNode(t *testing.T) {
 }
 
 func TestUpdateNode(t *testing.T) {
-	tb := NewTreeBuilder().WithNodes(newNodes())
+	tb := NewBuilder().WithNodes(newNodes())
 	tb.UpdateNode("5", func(n *Node) { n.Sort = 10 })
 	nodeMap, _ := tb.Build()
 
@@ -87,7 +87,7 @@ func TestUpdateNode(t *testing.T) {
 }
 
 func TestFilter(t *testing.T) {
-	tb := NewTreeBuilder().WithNodes(newNodes())
+	tb := NewBuilder().WithNodes(newNodes())
 	newTb := tb.Filter(func(n *Node) bool { return n.Sort%2 == 1 })
 	nodeMap, _ := newTb.Build()
 
@@ -99,7 +99,7 @@ func TestFilter(t *testing.T) {
 }
 
 func TestTransform(t *testing.T) {
-	tb := NewTreeBuilder().WithNodes(newNodes())
+	tb := NewBuilder().WithNodes(newNodes())
 	tb.Transform(func(n *Node) { n.Sort = 42 })
 	nodeMap, _ := tb.Build()
 	for _, n := range nodeMap {
@@ -110,7 +110,7 @@ func TestTransform(t *testing.T) {
 }
 
 func TestClone(t *testing.T) {
-	tb := NewTreeBuilder().WithNodes(newNodes())
+	tb := NewBuilder().WithNodes(newNodes())
 	clone := tb.Clone()
 	clone.UpdateNode("1", func(n *Node) { n.Sort = 100 })
 
@@ -124,10 +124,10 @@ func TestClone(t *testing.T) {
 func TestValidate_CycleAndOrphan(t *testing.T) {
 	// Cycle
 	nodes := []*Node{
-		{NodeKey: "1", ParentNodeKey: "2", Sort: 1},
-		{NodeKey: "2", ParentNodeKey: "1", Sort: 2},
+		{Key: "1", ParentKey: "2", Sort: 1},
+		{Key: "2", ParentKey: "1", Sort: 2},
 	}
-	tb := NewTreeBuilder().WithNodes(nodes)
+	tb := NewBuilder().WithNodes(nodes)
 	errs := tb.Validate()
 	hasCycle := false
 	for _, err := range errs {
@@ -141,10 +141,10 @@ func TestValidate_CycleAndOrphan(t *testing.T) {
 
 	// Orphan
 	nodes = []*Node{
-		{NodeKey: "1", ParentNodeKey: "1", Sort: 1},
-		{NodeKey: "2", ParentNodeKey: "3", Sort: 2},
+		{Key: "1", ParentKey: "1", Sort: 1},
+		{Key: "2", ParentKey: "3", Sort: 2},
 	}
-	tb = NewTreeBuilder().WithNodes(nodes)
+	tb = NewBuilder().WithNodes(nodes)
 	errs = tb.Validate()
 	hasOrphan := false
 	t.Log("nodeMap:", tb.nodeMap)
@@ -161,7 +161,7 @@ func TestValidate_CycleAndOrphan(t *testing.T) {
 }
 
 func TestStatistics(t *testing.T) {
-	tb := NewTreeBuilder().WithNodes(newNodes())
+	tb := NewBuilder().WithNodes(newNodes())
 	stats := tb.Statistics()
 
 	if stats["total_nodes"] != 5 {
@@ -183,12 +183,12 @@ func TestStatistics(t *testing.T) {
 
 func TestOrderStableSort(t *testing.T) {
 	nodes := []*Node{
-		{NodeKey: "1", ParentNodeKey: "1", Sort: 1},
-		{NodeKey: "2", ParentNodeKey: "1", Sort: 2},
-		{NodeKey: "3", ParentNodeKey: "1", Sort: 2},
-		{NodeKey: "4", ParentNodeKey: "1", Sort: 3},
+		{Key: "1", ParentKey: "1", Sort: 1},
+		{Key: "2", ParentKey: "1", Sort: 2},
+		{Key: "3", ParentKey: "1", Sort: 2},
+		{Key: "4", ParentKey: "1", Sort: 3},
 	}
-	tb := NewTreeBuilder().WithNodes(nodes)
+	tb := NewBuilder().WithNodes(nodes)
 	_, roots := tb.Build()
 	children := roots[0].Children
 	if len(children) != 3 {
@@ -197,10 +197,10 @@ func TestOrderStableSort(t *testing.T) {
 	// Children with same Sort should keep input order (2 before 3)
 	idx2, idx3 := -1, -1
 	for i, n := range children {
-		if n.NodeKey == "2" {
+		if n.Key == "2" {
 			idx2 = i
 		}
-		if n.NodeKey == "3" {
+		if n.Key == "3" {
 			idx3 = i
 		}
 	}
@@ -210,7 +210,7 @@ func TestOrderStableSort(t *testing.T) {
 }
 
 func TestEmptyTree(t *testing.T) {
-	tb := NewTreeBuilder()
+	tb := NewBuilder()
 	nodeMap, roots := tb.Build()
 	if len(nodeMap) != 0 {
 		t.Errorf("expected empty nodeMap, got %d", len(nodeMap))
@@ -222,11 +222,11 @@ func TestEmptyTree(t *testing.T) {
 
 func TestWithNodesNilNodes(t *testing.T) {
 	nodes := []*Node{
-		{NodeKey: "1", ParentNodeKey: "1", Sort: 1},
+		{Key: "1", ParentKey: "1", Sort: 1},
 		nil,
-		{NodeKey: "2", ParentNodeKey: "1", Sort: 2},
+		{Key: "2", ParentKey: "1", Sort: 2},
 	}
-	tb := NewTreeBuilder().WithNodes(nodes)
+	tb := NewBuilder().WithNodes(nodes)
 	nodeMap, roots := tb.Build()
 	if len(nodeMap) != 2 {
 		t.Errorf("expected 2 nodes, got %d", len(nodeMap))
@@ -237,7 +237,7 @@ func TestWithNodesNilNodes(t *testing.T) {
 }
 
 func TestFilterEmpty(t *testing.T) {
-	tb := NewTreeBuilder().WithNodes(newNodes())
+	tb := NewBuilder().WithNodes(newNodes())
 	newTb := tb.Filter(func(n *Node) bool { return false })
 	nodeMap, roots := newTb.Build()
 	if len(nodeMap) != 0 {
@@ -249,10 +249,10 @@ func TestFilterEmpty(t *testing.T) {
 }
 
 func TestTransformNoop(t *testing.T) {
-	tb := NewTreeBuilder().WithNodes(newNodes())
+	tb := NewBuilder().WithNodes(newNodes())
 	tb.Transform(func(n *Node) {})
 	nodeMap, roots := tb.Build()
-	tb2 := NewTreeBuilder().WithNodes(newNodes())
+	tb2 := NewBuilder().WithNodes(newNodes())
 	nodeMap2, roots2 := tb2.Build()
 	if !reflect.DeepEqual(nodeMap, nodeMap2) || !reflect.DeepEqual(roots, roots2) {
 		t.Errorf("noop Transform changed the tree")
