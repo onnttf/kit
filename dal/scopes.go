@@ -6,25 +6,26 @@ import (
 	"gorm.io/gorm"
 )
 
-// Pagination constants define the default and maximum number of records per page
+// Pagination constants.
 const (
-	DefaultPageSize = 10  // Default number of records per page
-	MaxPageSize     = 100 // Maximum allowed records per page
+	DefaultPageSize = 10  // Default number of records per page.
+	MaxPageSize     = 100 // Maximum allowed records per page.
 )
 
-// Paginate returns a scope function that applies pagination to a query using offset and limit, normalizing page and page size
+// Paginate returns a scope function that applies pagination to a query.
+//
+// Example:
+//
+//	db.Scopes(Paginate(1, 20)).Find(&users) // page 1, 20 items per page
 func Paginate(page, pageSize int) func(db *gorm.DB) *gorm.DB {
-	// Normalize page number
 	if page <= 0 {
 		page = 1
 	}
 
-	// Normalize page size
-	switch {
-	case pageSize <= 0:
+	if pageSize <= 0 {
 		pageSize = DefaultPageSize
-	case pageSize > MaxPageSize:
-		pageSize = MaxPageSize
+	} else {
+		pageSize = min(pageSize, MaxPageSize)
 	}
 
 	offset := (page - 1) * pageSize
@@ -34,42 +35,64 @@ func Paginate(page, pageSize int) func(db *gorm.DB) *gorm.DB {
 	}
 }
 
-// Condition returns a scope function that filters a query with a WHERE clause for the specified column and value
-func Condition(column string, value interface{}) func(db *gorm.DB) *gorm.DB {
+// Condition returns a scope function that filters a query by column and value.
+// The column name is quoted to prevent SQL injection.
+//
+// Example:
+//
+//	db.Scopes(Condition("user_id", 123)).Find(&users)
+func Condition(column string, value any) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(column, value)
+		return db.Where(db.Statement.Quote(column)+" = ?", value)
 	}
 }
 
-// OrderBy returns a scope function that sorts query results by the specified field in ascending or descending order
+// OrderBy returns a scope function that sorts query results.
+// The direction must be "asc" or "desc" (case-insensitive).
+// The field name is quoted to prevent SQL injection.
+//
+// Example:
+//
+//	db.Scopes(OrderBy("created_at", "desc")).Find(&users)
 func OrderBy(field string, direction string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		switch strings.ToLower(direction) {
-		case "asc":
-			return db.Order(field)
-		case "desc":
-			return db.Order(field + " DESC")
-		default:
-			return db
+		dir := "ASC"
+		if strings.ToLower(direction) == "desc" {
+			dir = "DESC"
 		}
+		return db.Order(db.Statement.Quote(field) + " " + dir)
 	}
 }
 
-// Limit returns a scope function that restricts the number of records returned by a query
+// Limit returns a scope function that limits the number of records returned.
+//
+// Example:
+//
+//	db.Scopes(Limit(10)).Find(&users)
 func Limit(limit int) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Limit(limit)
 	}
 }
 
-// LikeCondition returns a scope function that filters a query with a LIKE clause using wildcard matching
+// LikeCondition returns a scope function that filters a query using a LIKE clause.
+// Wildcards are automatically added around the value.
+// The column name is quoted to prevent SQL injection.
+//
+// Example:
+//
+//	db.Scopes(LikeCondition("name", "john")).Find(&users) // WHERE name LIKE '%john%'
 func LikeCondition(column string, value string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(column+" LIKE ?", "%"+value+"%")
+		return db.Where(db.Statement.Quote(column)+" LIKE ?", "%"+value+"%")
 	}
 }
 
-// SelectFields returns a scope function that specifies the fields to include in query results
+// SelectFields returns a scope function that specifies the fields to include.
+//
+// Example:
+//
+//	db.Scopes(SelectFields("id", "name", "email")).Find(&users) // SELECT id, name, email
 func SelectFields(fields ...string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Select(fields)

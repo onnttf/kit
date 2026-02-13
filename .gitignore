@@ -1,3 +1,6 @@
+# Claude Code
+.claude/
+
 # Go
 *.exe
 *.dll
