@@ -34,24 +34,34 @@ func Paginate(page, pageSize int) func(db *gorm.DB) *gorm.DB {
 	}
 }
 
-// Condition returns a scope function that filters a query with a WHERE clause for the specified column and value
-func Condition(column string, value interface{}) func(db *gorm.DB) *gorm.DB {
+// Condition returns a scope function that filters a query with a WHERE clause for the specified column and value.
+// The column name is safely quoted to prevent SQL injection.
+//
+// Example:
+//
+//	db.Scopes(Condition("user_id", 123)).Find(&users)
+func Condition(column string, value any) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(column, value)
+		// Use Quote to safely escape column name and prevent SQL injection
+		return db.Where(db.Statement.Quote(column)+" = ?", value)
 	}
 }
 
-// OrderBy returns a scope function that sorts query results by the specified field in ascending or descending order
+// OrderBy returns a scope function that sorts query results by the specified field in ascending or descending order.
+// The field name is safely quoted to prevent SQL injection. Direction must be "asc" or "desc" (case-insensitive).
+//
+// Example:
+//
+//	db.Scopes(OrderBy("created_at", "desc")).Find(&users)
 func OrderBy(field string, direction string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		switch strings.ToLower(direction) {
-		case "asc":
-			return db.Order(field)
-		case "desc":
-			return db.Order(field + " DESC")
-		default:
-			return db
+		// Normalize direction to prevent injection
+		dir := "ASC"
+		if strings.ToLower(direction) == "desc" {
+			dir = "DESC"
 		}
+		// Use Quote to safely escape field name
+		return db.Order(db.Statement.Quote(field) + " " + dir)
 	}
 }
 
@@ -62,10 +72,16 @@ func Limit(limit int) func(db *gorm.DB) *gorm.DB {
 	}
 }
 
-// LikeCondition returns a scope function that filters a query with a LIKE clause using wildcard matching
+// LikeCondition returns a scope function that filters a query with a LIKE clause using wildcard matching.
+// The column name is safely quoted to prevent SQL injection. Wildcards are automatically added around the value.
+//
+// Example:
+//
+//	db.Scopes(LikeCondition("name", "john")).Find(&users)  // WHERE name LIKE '%john%'
 func LikeCondition(column string, value string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(column+" LIKE ?", "%"+value+"%")
+		// Use Quote to safely escape column name and prevent SQL injection
+		return db.Where(db.Statement.Quote(column)+" LIKE ?", "%"+value+"%")
 	}
 }
 

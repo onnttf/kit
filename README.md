@@ -1,59 +1,79 @@
 # kit
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Go Reference](https://pkg.go.dev/badge/github.com/onnttf/kit.svg)](https://pkg.go.dev/github.com/onnttf/kit)
 
-A lightweight Go toolkit.
+A lightweight, modular Go toolkit for building production-ready applications.
 
-## Overview
+## Features
 
-**kit** is a modular, extensible, and developer-friendly toolkit designed to speed up the development of Go applications. Its goal is to provide reusable components and utilities to help you build maintainable and scalable software with ease.
+- **Concurrent Execution** - Task executor with retry, backoff, and error handling
+- **Database Abstraction** - Generic CRUD repository with GORM integration
+- **Container Utilities** - Slice operations (intersection, union, difference, deduplicate)
+- **Excel Processing** - Read and stream Excel files with ease
+- **DingTalk Integration** - Send messages to DingTalk robots
+- **Tree Structures** - Build and manipulate hierarchical data
+- **Pointer Helpers** - Safe pointer operations and utilities
+- **Time Utilities** - Day boundary calculations
 
-## Getting Started
-
-### Installation
-
-To install kit, use `go get`:
+## Installation
 
 ```bash
 go get github.com/onnttf/kit
 ```
 
-Or add it to your module dependencies:
+## Packages
 
-```bash
-go mod tidy
-```
-
-### Usage
-
-Import kit in your Go project:
-
-```go
-import "github.com/onnttf/kit"
-```
+| Package | Description |
+| --------- | ------------- |
+| [concurrent](concurrent/) | Concurrent task execution with retry and error handling |
+| [container](container/) | Slice operations and utilities |
+| [dal](dal/) | Generic database repository with GORM |
+| [dingtalk](dingtalk/) | DingTalk robot message sender |
+| [excel](excel/) | Excel file reading and streaming |
+| [ptr](ptr/) | Pointer helper functions |
+| [time](time/) | Time calculation utilities |
+| [tree](tree/) | Tree structure builder and operations |
 
 ## Documentation
 
-- [API Reference](https://pkg.go.dev/github.com/onnttf/kit)
-- See examples and source code for usage patterns.
+- [API Reference](https://pkg.go.dev/github.com/onnttf/kit) - Complete package documentation
 
 ## Contributing
 
-Contributions, issues, and feature requests are welcome!  
-Feel free to fork the repository and submit pull requests.
+Contributions are welcome! Please follow these guidelines:
 
-1. Fork the repo
-2. Create your feature branch (`git checkout -b feature/foo`)
-3. Commit your changes (`git commit -am 'Add some foo'`)
-4. Push to the branch (`git push origin feature/foo`)
-5. Open a pull request
+**Before contributing:**
+
+1. Ensure all tests pass: `go test ./...`
+2. Format your code: `goimports -w .`
+
+**Contribution process:**
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit your changes: `git commit -am 'Add amazing feature'`
+4. Push to the branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
+
+## Testing
+
+```bash
+# Run all tests
+go test ./...
+
+# Run tests with coverage
+go test ./... -cover
+
+# Run tests with race detection
+go test ./... -race
+```
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
-- Inspired by Go kit and other open-source toolkits.
-- Thanks to all contributors!
-
+- Inspired by Go kit and other open-source toolkits
+- Thanks to all contributors who help improve this project!

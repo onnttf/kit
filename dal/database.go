@@ -44,18 +44,29 @@ func NewRepo[T any]() *Repo[T] {
 }
 
 // ErrDatabase defines an error for unexpected database operation failures
-var ErrDatabase = errors.New("database: unexpected error occurred")
+var ErrDatabase = errors.New("unexpected error occurred")
 
 // ErrNoRowsAffected defines an error for database operations that modified no rows
-var ErrNoRowsAffected = errors.New("database: no rows were modified")
+var ErrNoRowsAffected = errors.New("no rows were modified")
 
-// handleError evaluates a GORM database operation and returns an error for failures or no rows affected
-func handleError(result *gorm.DB, action string) error {
+// ErrNotFound defines an error for query operations that found no matching records
+var ErrNotFound = errors.New("record not found")
+
+// handleExecError evaluates a GORM write operation (Insert/Update/Delete) and returns an error for failures or no rows affected
+func handleExecError(result *gorm.DB, action string) error {
 	if result.Error != nil {
-		return errors.Join(ErrDatabase, fmt.Errorf("%s: %w", action, result.Error))
+		return fmt.Errorf("%s: %w: %w", action, ErrDatabase, result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("%s: %w", action, ErrNoRowsAffected)
+	}
+	return nil
+}
+
+// handleQueryError evaluates a GORM read operation and returns an error only for failures, not for empty results
+func handleQueryError(result *gorm.DB, action string) error {
+	if result.Error != nil {
+		return fmt.Errorf("%s: %w: %w", action, ErrDatabase, result.Error)
 	}
 	return nil
 }
@@ -66,7 +77,7 @@ func (r *Repo[T]) Insert(ctx context.Context, db *gorm.DB, newValue *T) error {
 		return fmt.Errorf("insert: input is nil")
 	}
 	result := db.WithContext(ctx).Create(newValue)
-	return handleError(result, "insert")
+	return handleExecError(result, "insert")
 }
 
 // BatchInsert adds multiple entities to the database in batches, using a default batch size of 10 if unspecified
@@ -83,7 +94,7 @@ func (r *Repo[T]) BatchInsert(ctx context.Context, db *gorm.DB, newValues []*T, 
 		batchSize = 10
 	}
 	result := db.WithContext(ctx).CreateInBatches(newValues, batchSize)
-	return handleError(result, "batch insert")
+	return handleExecError(result, "batch insert")
 }
 
 // Update modifies an existing entity in the database, applying the specified scopes for filtering
@@ -92,7 +103,7 @@ func (r *Repo[T]) Update(ctx context.Context, db *gorm.DB, newValue *T, scopes .
 		return fmt.Errorf("update: input is nil")
 	}
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Updates(newValue)
-	return handleError(result, "update")
+	return handleExecError(result, "update")
 }
 
 // UpdateFields modifies specific fields of entities in the database, applying the specified scopes
@@ -101,39 +112,48 @@ func (r *Repo[T]) UpdateFields(ctx context.Context, db *gorm.DB, newValue map[st
 		return fmt.Errorf("update fields: input is empty")
 	}
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Updates(newValue)
-	return handleError(result, "update fields")
+	return handleExecError(result, "update fields")
 }
 
-// QueryOne retrieves a single entity from the database matching the specified scopes, returning an error if no rows are found
+// QueryOne retrieves a single entity from the database matching the specified scopes.
+// Returns ErrNotFound if no matching record is found, making it easy to distinguish between "not found" and other errors.
+//
+// Example:
+//
+//	user, err := repo.QueryOne(ctx, db, Condition("id", 123))
+//	if errors.Is(err, dal.ErrNotFound) {
+//	    // handle not found case
+//	}
 func (r *Repo[T]) QueryOne(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) (*T, error) {
 	var record T
 	result := db.WithContext(ctx).Scopes(scopes...).Limit(1).Find(&record)
-	if result.Error != nil {
-		return nil, errors.Join(ErrDatabase, fmt.Errorf("query one: %w", result.Error))
+	if err := handleQueryError(result, "query one"); err != nil {
+		return nil, err
 	}
 	if result.RowsAffected == 0 {
-		// return nil, fmt.Errorf("query one: %w", ErrNoRowsAffected)
-		return nil, nil
+		return nil, ErrNotFound
 	}
 	return &record, nil
 }
 
-// Query retrieves multiple entities from the database matching the specified scopes
+// Query retrieves multiple entities from the database matching the specified scopes.
+// Returns an empty slice (not an error) if no matching records are found.
 func (r *Repo[T]) Query(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) ([]T, error) {
 	var records []T
 	result := db.WithContext(ctx).Scopes(scopes...).Find(&records)
-	if result.Error != nil {
-		return nil, errors.Join(ErrDatabase, fmt.Errorf("query: %w", result.Error))
+	if err := handleQueryError(result, "query"); err != nil {
+		return nil, err
 	}
 	return records, nil
 }
 
-// Count returns the number of entities in the database matching the specified scopes
+// Count returns the number of entities in the database matching the specified scopes.
+// Returns 0 (not an error) if no matching records are found.
 func (r *Repo[T]) Count(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) (int64, error) {
 	var count int64
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Count(&count)
-	if result.Error != nil {
-		return 0, errors.Join(ErrDatabase, fmt.Errorf("count: %w", result.Error))
+	if err := handleQueryError(result, "count"); err != nil {
+		return 0, err
 	}
 	return count, nil
 }
@@ -141,5 +161,5 @@ func (r *Repo[T]) Count(ctx context.Context, db *gorm.DB, scopes ...func(db *gor
 // Delete removes entities from the database matching the specified scopes
 func (r *Repo[T]) Delete(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) error {
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Delete(new(T))
-	return handleError(result, "delete")
+	return handleExecError(result, "delete")
 }
