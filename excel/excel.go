@@ -2,192 +2,347 @@ package excel
 
 import (
 	"fmt"
-	"io"
+	"reflect"
+	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/xuri/excelize/v2"
 )
 
-// Workbook wraps excelize.File to support multiple sheet reads.
-type Workbook struct {
-	file *excelize.File
+const excelTag = "excel"
+
+var structCache sync.Map // map[reflect.Type]structInfo
+
+type structField struct {
+	index int
 }
 
-// Open creates a new Workbook from an io.Reader.
-//
-// Example:
-//
-//	wb, err := excel.Open(file)
-//	if err != nil {
-//	    return err
-//	}
-//	defer wb.Close()
-//
-//	sheet1Data, err := wb.ReadSheet("Sheet1")
-//	sheet2Data, err := wb.ReadSheet("Sheet2")
-func Open(reader io.Reader) (*Workbook, error) {
-	f, err := excelize.OpenReader(reader)
+type structInfo struct {
+	typ    reflect.Type
+	fields map[int]structField
+}
+
+// IsXLSX reports whether name has the .xlsx extension.
+func IsXLSX(name string) bool {
+	return strings.HasSuffix(strings.ToLower(name), ".xlsx")
+}
+
+// Read reads all sheets from the Excel file at path.
+// The returned map keys are sheet names.
+func Read(path string) (map[string][][]string, error) {
+	f, err := excelize.OpenFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("open Excel file: %w", err)
+		return nil, err
 	}
-	return &Workbook{file: f}, nil
-}
+	defer f.Close()
 
-// ReadSheet returns row data from a specific sheet as a 2D string slice.
-//
-// Example:
-//
-//	data, err := wb.ReadSheet("Sheet1")
-func (wb *Workbook) ReadSheet(sheetName string) ([][]string, error) {
-	return extractSheetData(wb.file, sheetName)
-}
+	sheets := f.GetSheetList()
+	result := make(map[string][][]string, len(sheets))
 
-// ReadSheets returns row data from multiple sheets, or all sheets if none specified.
-//
-// Example:
-//
-//	data, err := wb.ReadSheets("Sheet1", "Sheet2")
-func (wb *Workbook) ReadSheets(sheetNames ...string) (map[string][][]string, error) {
-	// If no sheets specified, read all sheets
-	if len(sheetNames) == 0 {
-		sheetNames = wb.file.GetSheetList()
-	}
-
-	sheetData := make(map[string][][]string, len(sheetNames))
-	for _, sheetName := range sheetNames {
-		data, err := extractSheetData(wb.file, sheetName)
+	for _, sheet := range sheets {
+		rows, err := f.GetRows(sheet)
 		if err != nil {
 			return nil, err
 		}
-		sheetData[sheetName] = data
+		result[sheet] = rows
 	}
 
-	return sheetData, nil
+	return result, nil
 }
 
-// SheetNames returns the names of all sheets in the workbook.
-//
-// Example:
-//
-//	names := wb.SheetNames() // []string{"Sheet1", "Sheet2"}
-func (wb *Workbook) SheetNames() []string {
-	return wb.file.GetSheetList()
-}
-
-// StreamRows reads a sheet row by row, calling the handler function for each row.
-// It is memory-efficient for large files.
-//
-// Example:
-//
-//	err := wb.StreamRows("Sheet1", func(rowIndex int, row []string) error {
-//	    fmt.Printf("Row %d: %v\n", rowIndex, row)
-//	    return nil
-//	})
-func (wb *Workbook) StreamRows(sheetName string, handler func(rowIndex int, row []string) error) error {
-	rows, err := wb.file.Rows(sheetName)
+// ReadSheet reads a single sheet from the Excel file.
+func ReadSheet(path, sheet string) ([][]string, error) {
+	f, err := excelize.OpenFile(path)
 	if err != nil {
-		return fmt.Errorf("get rows iterator for sheet %s: %w", sheetName, err)
+		return nil, err
+	}
+	defer f.Close()
+
+	return f.GetRows(sheet)
+}
+
+// Walk reads the Excel file row by row and calls fn for each row.
+// It avoids loading the entire sheet into memory.
+func Walk(path, sheet string, fn func([]string) error) error {
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	rows, err := f.Rows(sheet)
+	if err != nil {
+		return err
 	}
 	defer rows.Close()
 
-	rowIndex := 0
 	for rows.Next() {
-		row, err := rows.Columns()
+		columns, err := rows.Columns()
 		if err != nil {
-			return fmt.Errorf("read row %d in sheet %s: %w", rowIndex, sheetName, err)
+			return err
 		}
 
-		if err := handler(rowIndex, row); err != nil {
-			return fmt.Errorf("handler error at row %d: %w", rowIndex, err)
+		if err := fn(columns); err != nil {
+			return err
 		}
-		rowIndex++
 	}
 
 	return rows.Error()
 }
 
-// Close closes the underlying Excel file and releases resources.
+// Scan reads the Excel file row by row, unmarshals each row into T,
+// and calls fn for each row.
 //
-// Example:
-//
-//	wb.Close()
-func (wb *Workbook) Close() error {
-	if wb.file != nil {
-		return wb.file.Close()
-	}
-	return nil
-}
-
-// IsExcel reports whether the file name has a ".xlsx" extension (case-insensitive).
-//
-// Example:
-//
-//	excel.IsExcel("data.xlsx")   // returns true
-//	excel.IsExcel("data.XLSX")  // returns true
-//	excel.IsExcel("data.csv")   // returns false
-func IsExcel(fileName string) bool {
-	return strings.HasSuffix(strings.ToLower(fileName), ".xlsx")
-}
-
-// Read returns row data from specified Excel sheets, or all sheets if none specified.
-// It is a convenience function that opens, reads, and closes the file in one call.
-//
-// Example:
-//
-//	data, err := excel.Read(file)
-func Read(file io.Reader, sheetNames ...string) (map[string][][]string, error) {
-	wb, err := Open(file)
-	if err != nil {
-		return nil, err
-	}
-	defer wb.Close()
-
-	return wb.ReadSheets(sheetNames...)
-}
-
-// ReadSheet returns row data from a single Excel sheet.
-// It is a convenience function that opens, reads, and closes the file in one call.
-//
-// Example:
-//
-//	data, err := excel.ReadSheet(file, "Sheet1")
-func ReadSheet(file io.Reader, sheetName string) ([][]string, error) {
-	wb, err := Open(file)
-	if err != nil {
-		return nil, err
-	}
-	defer wb.Close()
-
-	return wb.ReadSheet(sheetName)
-}
-
-// StreamRows reads an Excel sheet row by row, calling the handler function for each row.
-// It is memory-efficient for large files.
-//
-// Example:
-//
-//	err := excel.StreamRows(file, "Sheet1", func(rowIndex int, row []string) error {
-//	    fmt.Printf("Row %d: %v\n", rowIndex, row)
-//	    if rowIndex > 1000 {
-//	        return fmt.Errorf("stop after 1000 rows")
-//	    }
-//	    return nil
-//	})
-func StreamRows(reader io.Reader, sheetName string, handler func(rowIndex int, row []string) error) error {
-	wb, err := Open(reader)
+// Rows that fail to parse are skipped.
+func Scan[T any](path, sheet string, fn func(*T) error) error {
+	f, err := excelize.OpenFile(path)
 	if err != nil {
 		return err
 	}
-	defer wb.Close()
+	defer f.Close()
 
-	return wb.StreamRows(sheetName, handler)
+	rows, err := f.Rows(sheet)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	info := getStructInfo[T]()
+
+	for rows.Next() {
+		columns, err := rows.Columns()
+		if err != nil {
+			return err
+		}
+
+		v, err := unmarshalRow(columns, info.typ, info.fields, 0)
+		if err != nil {
+			continue
+		}
+
+		t := v.Interface().(T)
+
+		if err := fn(&t); err != nil {
+			return err
+		}
+	}
+
+	return rows.Error()
 }
 
-// extractSheetData retrieves row data from a specific Excel sheet as a 2D string slice
-func extractSheetData(workbook *excelize.File, sheetName string) ([][]string, error) {
-	rows, err := workbook.GetRows(sheetName)
+// ScanSheet reads all rows from sheet and returns them as a slice of T.
+//
+// Example:
+//
+//	type Person struct {
+//	    Name string `excel:"A"`
+//	    Age  int    `excel:"B"`
+//	}
+//
+// Rows that fail to parse are returned as nil.
+func ScanSheet[T any](path, sheet string) ([]*T, error) {
+	f, err := excelize.OpenFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read rows from sheet %s: %w", sheetName, err)
+		return nil, err
 	}
-	return rows, nil
+	defer f.Close()
+
+	rows, err := f.GetRows(sheet)
+	if err != nil {
+		return nil, err
+	}
+
+	info := getStructInfo[T]()
+
+	result := make([]*T, 0, len(rows))
+
+	for i, row := range rows {
+		v, err := unmarshalRow(row, info.typ, info.fields, i+1)
+		if err != nil {
+			result = append(result, nil)
+			continue
+		}
+
+		t := v.Interface().(T)
+		result = append(result, &t)
+	}
+
+	return result, nil
+}
+
+func getStructInfo[T any]() structInfo {
+	var t T
+
+	typ := reflect.TypeOf(t)
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
+	if info, ok := structCache.Load(typ); ok {
+		return info.(structInfo)
+	}
+
+	info := structInfo{
+		typ:    typ,
+		fields: buildFieldIndex(typ),
+	}
+	structCache.Store(typ, info)
+	return info
+}
+
+func buildFieldIndex(typ reflect.Type) map[int]structField {
+	index := make(map[int]structField)
+
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+
+		tag := field.Tag.Get(excelTag)
+		if tag == "" || tag == "-" {
+			continue
+		}
+
+		col, err := columnIndex(tag)
+		if err != nil {
+			continue
+		}
+
+		index[col] = structField{index: i}
+	}
+
+	return index
+}
+
+func columnIndex(col string) (int, error) {
+	col = strings.ToUpper(col)
+
+	if col == "" {
+		return 0, fmt.Errorf("empty column name")
+	}
+
+	n := 0
+
+	for _, c := range col {
+		if c < 'A' || c > 'Z' {
+			return 0, fmt.Errorf("invalid column name %q", col)
+		}
+
+		n = n*26 + int(c-'A'+1)
+	}
+
+	return n - 1, nil
+}
+
+func columnName(n int) string {
+	if n < 0 {
+		return ""
+	}
+
+	var s string
+
+	for n >= 0 {
+		s = string(rune('A'+n%26)) + s
+		n = n/26 - 1
+
+		if n < 0 {
+			break
+		}
+	}
+
+	return s
+}
+
+func unmarshalRow(
+	columns []string,
+	typ reflect.Type,
+	fields map[int]structField,
+	row int,
+) (reflect.Value, error) {
+	v := reflect.New(typ).Elem()
+
+	for colIndex, f := range fields {
+		if colIndex >= len(columns) {
+			continue
+		}
+
+		if err := setField(v.Field(f.index), columns[colIndex]); err != nil {
+			return reflect.Value{}, fmt.Errorf("row %d column %s: %w", row, columnName(colIndex), err)
+		}
+	}
+
+	return v, nil
+}
+
+func setField(v reflect.Value, s string) error {
+	if !v.CanSet() {
+		return nil
+	}
+
+	if v.Kind() == reflect.Ptr {
+		if s == "" {
+			v.Set(reflect.Zero(v.Type()))
+			return nil
+		}
+
+		ptr := reflect.New(v.Type().Elem())
+
+		if err := parseValue(ptr.Elem(), s); err != nil {
+			return err
+		}
+
+		v.Set(ptr)
+		return nil
+	}
+
+	return parseValue(v, s)
+}
+
+func parseValue(v reflect.Value, s string) error {
+	if s == "" {
+		v.Set(reflect.Zero(v.Type()))
+		return nil
+	}
+
+	switch v.Kind() {
+
+	case reflect.String:
+		v.SetString(s)
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		n, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return fmt.Errorf("cannot parse %q as int: %w", s, err)
+		}
+
+		v.SetInt(n)
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		n, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return fmt.Errorf("cannot parse %q as uint: %w", s, err)
+		}
+
+		v.SetUint(n)
+
+	case reflect.Float32, reflect.Float64:
+		n, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return fmt.Errorf("cannot parse %q as float: %w", s, err)
+		}
+
+		v.SetFloat(n)
+
+	case reflect.Bool:
+		n, err := strconv.ParseBool(s)
+		if err != nil {
+			return fmt.Errorf("cannot parse %q as bool: %w", s, err)
+		}
+
+		v.SetBool(n)
+
+	default:
+		return fmt.Errorf("unsupported type %v", v.Type())
+	}
+
+	return nil
 }
