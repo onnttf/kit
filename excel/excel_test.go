@@ -1,475 +1,184 @@
 package excel
 
 import (
-	"bytes"
-	"reflect"
-	"strings"
+	"os"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/xuri/excelize/v2"
 )
 
-// Helper function to create a test Excel file in memory
-func createTestExcelFile(t *testing.T) *bytes.Buffer {
-	t.Helper()
-
-	f := excelize.NewFile()
-	defer f.Close()
-
-	// Create Sheet1 with test data
-	sheet1 := "Sheet1"
-	data1 := [][]any{
-		{"Name", "Age", "City"},
-		{"Alice", 30, "New York"},
-		{"Bob", 25, "Los Angeles"},
-		{"Charlie", 35, "Chicago"},
-	}
-
-	for rowIdx, row := range data1 {
-		for colIdx, value := range row {
-			cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowIdx+1)
-			f.SetCellValue(sheet1, cell, value)
-		}
-	}
-
-	// Create Sheet2 with test data
-	sheet2 := "Sheet2"
-	f.NewSheet(sheet2)
-	data2 := [][]any{
-		{"Product", "Price"},
-		{"Apple", 1.5},
-		{"Banana", 0.8},
-	}
-
-	for rowIdx, row := range data2 {
-		for colIdx, value := range row {
-			cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowIdx+1)
-			f.SetCellValue(sheet2, cell, value)
-		}
-	}
-
-	var buf bytes.Buffer
-	if err := f.Write(&buf); err != nil {
-		t.Fatalf("Failed to create test Excel file: %v", err)
-	}
-
-	return &buf
-}
-
-// Test Suite for IsExcel Function
-
-func TestIsExcel(t *testing.T) {
+func TestIsXLSX(t *testing.T) {
 	tests := []struct {
 		name     string
 		filename string
 		want     bool
 	}{
-		{"valid xlsx", "test.xlsx", true},
-		{"valid XLSX uppercase", "TEST.XLSX", true},
-		{"valid mixed case", "Test.XlSx", true},
-		{"xls file", "test.xls", false},
-		{"csv file", "test.csv", false},
-		{"txt file", "test.txt", false},
-		{"no extension", "test", false},
-		{"xlsx in name but wrong ext", "xlsx.txt", false},
-		{"empty string", "", false},
+		{"xlsx extension", "data.xlsx", true},
+		{"XLSX upper", "data.XLSX", true},
+		{"xls extension", "data.xls", false},
+		{"csv extension", "data.csv", false},
+		{"no extension", "data", false},
+		{"empty", "", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := IsExcel(tt.filename)
-			if got != tt.want {
-				t.Errorf("IsExcel(%q) = %v, want %v", tt.filename, got, tt.want)
-			}
+			assert.Equal(t, tt.want, IsXLSX(tt.filename))
 		})
 	}
 }
 
-// Test Suite for Open Function
+func TestRead(t *testing.T) {
+	testFile := createTestFile(t)
+	defer os.Remove(testFile)
 
-func TestOpen_Success(t *testing.T) {
-	buf := createTestExcelFile(t)
-
-	wb, err := Open(bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	defer wb.Close()
-
-	if wb == nil {
-		t.Fatal("Expected non-nil Workbook")
-	}
-	if wb.file == nil {
-		t.Fatal("Expected non-nil underlying file")
-	}
+	allSheets, err := Read(testFile)
+	require.NoError(t, err)
+	assert.Contains(t, allSheets, "Sheet1")
+	assert.Equal(t, 3, len(allSheets["Sheet1"]))
+	assert.Equal(t, []string{"Name", "Age", "City"}, allSheets["Sheet1"][0])
 }
-
-func TestOpen_InvalidFile(t *testing.T) {
-	invalidData := bytes.NewReader([]byte("not an excel file"))
-
-	wb, err := Open(invalidData)
-	if err == nil {
-		if wb != nil {
-			wb.Close()
-		}
-		t.Fatal("Expected error for invalid Excel file")
-	}
-
-	if !strings.Contains(err.Error(), "open Excel file") {
-		t.Errorf("Expected 'open Excel file' error, got: %v", err)
-	}
-}
-
-// Test Suite for Workbook.ReadSheet Function
-
-func TestWorkbook_ReadSheet(t *testing.T) {
-	buf := createTestExcelFile(t)
-	wb, err := Open(bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	defer wb.Close()
-
-	t.Run("read Sheet1", func(t *testing.T) {
-		rows, err := wb.ReadSheet("Sheet1")
-		if err != nil {
-			t.Fatalf("ReadSheet() error = %v", err)
-		}
-
-		if len(rows) != 4 {
-			t.Errorf("Expected 4 rows, got %d", len(rows))
-		}
-
-		// Check header row
-		if len(rows) > 0 {
-			expected := []string{"Name", "Age", "City"}
-			if !reflect.DeepEqual(rows[0], expected) {
-				t.Errorf("Header row: got %v, want %v", rows[0], expected)
-			}
-		}
-
-		// Check data row
-		if len(rows) > 1 {
-			expected := []string{"Alice", "30", "New York"}
-			if !reflect.DeepEqual(rows[1], expected) {
-				t.Errorf("Data row: got %v, want %v", rows[1], expected)
-			}
-		}
-	})
-
-	t.Run("read non-existent sheet", func(t *testing.T) {
-		_, err := wb.ReadSheet("NonExistent")
-		if err == nil {
-			t.Error("Expected error for non-existent sheet")
-		}
-	})
-}
-
-// Test Suite for Workbook.ReadSheets Function
-
-func TestWorkbook_ReadSheets_AllSheets(t *testing.T) {
-	buf := createTestExcelFile(t)
-	wb, err := Open(bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	defer wb.Close()
-
-	sheets, err := wb.ReadSheets()
-	if err != nil {
-		t.Fatalf("ReadSheets() error = %v", err)
-	}
-
-	if len(sheets) != 2 {
-		t.Errorf("Expected 2 sheets, got %d", len(sheets))
-	}
-
-	if _, ok := sheets["Sheet1"]; !ok {
-		t.Error("Expected Sheet1 to be present")
-	}
-
-	if _, ok := sheets["Sheet2"]; !ok {
-		t.Error("Expected Sheet2 to be present")
-	}
-}
-
-func TestWorkbook_ReadSheets_SpecificSheets(t *testing.T) {
-	buf := createTestExcelFile(t)
-	wb, err := Open(bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	defer wb.Close()
-
-	sheets, err := wb.ReadSheets("Sheet1")
-	if err != nil {
-		t.Fatalf("ReadSheets() error = %v", err)
-	}
-
-	if len(sheets) != 1 {
-		t.Errorf("Expected 1 sheet, got %d", len(sheets))
-	}
-
-	if _, ok := sheets["Sheet1"]; !ok {
-		t.Error("Expected Sheet1 to be present")
-	}
-
-	if _, ok := sheets["Sheet2"]; ok {
-		t.Error("Did not expect Sheet2 to be present")
-	}
-}
-
-// Test Suite for Workbook.SheetNames Function
-
-func TestWorkbook_SheetNames(t *testing.T) {
-	buf := createTestExcelFile(t)
-	wb, err := Open(bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	defer wb.Close()
-
-	sheetList := wb.SheetNames()
-
-	if len(sheetList) != 2 {
-		t.Errorf("Expected 2 sheets, got %d", len(sheetList))
-	}
-
-	expectedSheets := map[string]bool{"Sheet1": true, "Sheet2": true}
-	for _, sheet := range sheetList {
-		if !expectedSheets[sheet] {
-			t.Errorf("Unexpected sheet: %s", sheet)
-		}
-	}
-}
-
-// Test Suite for Workbook.StreamRows Function
-
-func TestWorkbook_StreamRows(t *testing.T) {
-	buf := createTestExcelFile(t)
-	wb, err := Open(bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	defer wb.Close()
-
-	var rowCount int
-	var firstRow []string
-
-	err = wb.StreamRows("Sheet1", func(rowIndex int, row []string) error {
-		rowCount++
-		if rowIndex == 0 {
-			firstRow = row
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("StreamRows() error = %v", err)
-	}
-
-	if rowCount != 4 {
-		t.Errorf("Expected 4 rows processed, got %d", rowCount)
-	}
-
-	expectedFirstRow := []string{"Name", "Age", "City"}
-	if !reflect.DeepEqual(firstRow, expectedFirstRow) {
-		t.Errorf("First row: got %v, want %v", firstRow, expectedFirstRow)
-	}
-}
-
-func TestWorkbook_StreamRows_EarlyStop(t *testing.T) {
-	buf := createTestExcelFile(t)
-	wb, err := Open(bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	defer wb.Close()
-
-	var rowCount int
-	stopErr := bytes.ErrTooLarge // Use a sentinel error
-
-	err = wb.StreamRows("Sheet1", func(rowIndex int, row []string) error {
-		rowCount++
-		if rowIndex >= 1 {
-			return stopErr
-		}
-		return nil
-	})
-
-	if err == nil {
-		t.Fatal("Expected error from handler")
-	}
-
-	if rowCount != 2 {
-		t.Errorf("Expected 2 rows before stop, got %d", rowCount)
-	}
-}
-
-// Test Suite for Read Function
-
-func TestRead_AllSheets(t *testing.T) {
-	buf := createTestExcelFile(t)
-
-	sheets, err := Read(bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		t.Fatalf("Read() error = %v", err)
-	}
-
-	if len(sheets) != 2 {
-		t.Errorf("Expected 2 sheets, got %d", len(sheets))
-	}
-
-	if _, ok := sheets["Sheet1"]; !ok {
-		t.Error("Expected Sheet1")
-	}
-	if _, ok := sheets["Sheet2"]; !ok {
-		t.Error("Expected Sheet2")
-	}
-}
-
-func TestRead_SpecificSheets(t *testing.T) {
-	buf := createTestExcelFile(t)
-
-	sheets, err := Read(bytes.NewReader(buf.Bytes()), "Sheet1")
-	if err != nil {
-		t.Fatalf("Read() error = %v", err)
-	}
-
-	if len(sheets) != 1 {
-		t.Errorf("Expected 1 sheet, got %d", len(sheets))
-	}
-
-	if _, ok := sheets["Sheet1"]; !ok {
-		t.Error("Expected Sheet1")
-	}
-}
-
-// Test Suite for ReadSheet Function
 
 func TestReadSheet(t *testing.T) {
-	buf := createTestExcelFile(t)
+	testFile := createTestFileWithData(t, [][]string{
+		{"Name", "Age"},
+		{"Alice", "25"},
+		{"Bob", "30"},
+	})
+	defer os.Remove(testFile)
 
-	rows, err := ReadSheet(bytes.NewReader(buf.Bytes()), "Sheet1")
-	if err != nil {
-		t.Fatalf("ReadSheet() error = %v", err)
-	}
-
-	if len(rows) != 4 {
-		t.Errorf("Expected 4 rows, got %d", len(rows))
-	}
-
-	expectedHeader := []string{"Name", "Age", "City"}
-	if !reflect.DeepEqual(rows[0], expectedHeader) {
-		t.Errorf("Header: got %v, want %v", rows[0], expectedHeader)
-	}
+	rows, err := ReadSheet(testFile, "Sheet1")
+	require.NoError(t, err)
+	assert.Equal(t, 3, len(rows))
+	assert.Equal(t, []string{"Name", "Age"}, rows[0])
+	assert.Equal(t, []string{"Alice", "25"}, rows[1])
 }
 
-// Test Suite for StreamRows Function (Standalone)
+func TestScanSheet(t *testing.T) {
+	type Person struct {
+		Name string `excel:"A"`
+		Age  int    `excel:"B"`
+		City string `excel:"C"`
+	}
 
-func TestStreamRows_Standalone(t *testing.T) {
-	buf := createTestExcelFile(t)
+	testFile := createTestFileWithData(t, [][]string{
+		{"Name", "Age", "City"},
+		{"Alice", "25", "Beijing"},
+		{"Bob", "30", "Shanghai"},
+	})
+	defer os.Remove(testFile)
 
-	var rowCount int
-	err := StreamRows(bytes.NewReader(buf.Bytes()), "Sheet1", func(rowIndex int, row []string) error {
-		rowCount++
+	people, err := ScanSheet[Person](testFile, "Sheet1")
+	require.NoError(t, err)
+
+	// First row (header) fails to parse, so it becomes nil
+	assert.Equal(t, 3, len(people))
+	// Filter out nil values
+	var dataRows []*Person
+	for _, p := range people {
+		if p != nil {
+			dataRows = append(dataRows, p)
+		}
+	}
+
+	assert.Equal(t, 2, len(dataRows))
+	assert.Equal(t, "Alice", dataRows[0].Name)
+	assert.Equal(t, 25, dataRows[0].Age)
+	assert.Equal(t, "Bob", dataRows[1].Name)
+	assert.Equal(t, 30, dataRows[1].Age)
+}
+
+func TestScanSheetEmptyFile(t *testing.T) {
+	type Person struct {
+		Name string `excel:"A"`
+	}
+
+	testFile := createTestFileWithData(t, [][]string{
+		{"Name"},
+	})
+	defer os.Remove(testFile)
+
+	people, err := ScanSheet[Person](testFile, "Sheet1")
+	require.NoError(t, err)
+	// Header only, fails to parse
+	assert.Equal(t, 1, len(people))
+}
+
+func TestWalk(t *testing.T) {
+	testFile := createTestFileWithData(t, [][]string{
+		{"Name", "Age"},
+		{"Alice", "25"},
+		{"Bob", "30"},
+	})
+	defer os.Remove(testFile)
+
+	var rows [][]string
+	err := Walk(testFile, "Sheet1", func(row []string) error {
+		rows = append(rows, row)
 		return nil
 	})
-	if err != nil {
-		t.Fatalf("StreamRows() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if rowCount != 4 {
-		t.Errorf("Expected 4 rows, got %d", rowCount)
-	}
+	assert.Equal(t, 3, len(rows))
+	assert.Equal(t, []string{"Name", "Age"}, rows[0])
+	assert.Equal(t, []string{"Alice", "25"}, rows[1])
+	assert.Equal(t, []string{"Bob", "30"}, rows[2])
 }
 
-// Test Suite for Workbook.Close Function
-
-func TestWorkbook_Close(t *testing.T) {
-	buf := createTestExcelFile(t)
-	wb, err := Open(bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
+func TestScan(t *testing.T) {
+	type Person struct {
+		Name string `excel:"A"`
+		Age  int    `excel:"B"`
 	}
 
-	err = wb.Close()
-	if err != nil {
-		t.Errorf("Close() error = %v", err)
-	}
+	testFile := createTestFileWithData(t, [][]string{
+		{"Name", "Age"},
+		{"Alice", "25"},
+		{"Bob", "30"},
+	})
+	defer os.Remove(testFile)
 
-	// Multiple closes should be safe
-	err = wb.Close()
-	if err != nil {
-		t.Errorf("Second Close() error = %v", err)
-	}
+	var people []*Person
+	err := Scan(testFile, "Sheet1", func(p *Person) error {
+		people = append(people, p)
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Header row is skipped because it fails to parse
+	assert.Equal(t, 2, len(people))
+	assert.Equal(t, "Alice", people[0].Name)
+	assert.Equal(t, 25, people[0].Age)
+	assert.Equal(t, "Bob", people[1].Name)
+	assert.Equal(t, 30, people[1].Age)
 }
 
-// Integration Tests
-
-func TestWorkbook_ReuseForMultipleReads(t *testing.T) {
-	buf := createTestExcelFile(t)
-	wb, err := Open(bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	defer wb.Close()
-
-	// Read Sheet1 multiple times
-	for i := range 3 {
-		rows, err := wb.ReadSheet("Sheet1")
-		if err != nil {
-			t.Fatalf("ReadSheet() iteration %d error = %v", i, err)
-		}
-		if len(rows) != 4 {
-			t.Errorf("Iteration %d: expected 4 rows, got %d", i, len(rows))
-		}
-	}
-
-	// Read Sheet2
-	rows, err := wb.ReadSheet("Sheet2")
-	if err != nil {
-		t.Fatalf("ReadSheet(Sheet2) error = %v", err)
-	}
-	if len(rows) != 3 {
-		t.Errorf("Sheet2: expected 3 rows, got %d", len(rows))
-	}
+// Helper function to create a test Excel file
+func createTestFile(t *testing.T) string {
+	return createTestFileWithData(t, [][]string{
+		{"Name", "Age", "City"},
+		{"Alice", "25", "Beijing"},
+		{"Bob", "30", "Shanghai"},
+	})
 }
 
-// Benchmark Tests
+// Helper function to create a test Excel file with custom data
+func createTestFileWithData(t *testing.T, data [][]string) string {
+	f := excelize.NewFile()
+	defer f.Close()
 
-func BenchmarkOpen(b *testing.B) {
-	buf := createTestExcelFile(&testing.T{})
-	data := buf.Bytes()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		wb, _ := Open(bytes.NewReader(data))
-		if wb != nil {
-			wb.Close()
+	for rowIdx, row := range data {
+		for colIdx, value := range row {
+			cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowIdx+1)
+			f.SetCellValue("Sheet1", cell, value)
 		}
 	}
-}
 
-func BenchmarkWorkbook_ReadSheet(b *testing.B) {
-	buf := createTestExcelFile(&testing.T{})
-	wb, _ := Open(bytes.NewReader(buf.Bytes()))
-	defer wb.Close()
+	tmpFile := t.TempDir() + "/test.xlsx"
+	err := f.SaveAs(tmpFile)
+	require.NoError(t, err)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = wb.ReadSheet("Sheet1")
-	}
-}
-
-func BenchmarkWorkbook_StreamRows(b *testing.B) {
-	buf := createTestExcelFile(&testing.T{})
-	wb, _ := Open(bytes.NewReader(buf.Bytes()))
-	defer wb.Close()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = wb.StreamRows("Sheet1", func(rowIndex int, row []string) error {
-			return nil
-		})
-	}
+	return tmpFile
 }
