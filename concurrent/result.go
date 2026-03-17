@@ -4,36 +4,36 @@ import "time"
 
 // ErrorSample records a single error occurrence.
 type ErrorSample struct {
-	Error     error     // the error
-	TaskID    int       // ID of the failed task
-	Attempt   int       // retry attempt when error occurred
-	Timestamp time.Time // when the error occurred
+	Error     error     // the error.
+	TaskID    int       // ID of the failed task.
+	Attempt   int       // retry attempt when error occurred.
+	Timestamp time.Time // when the error occurred.
 }
 
 // AbortReason describes why execution was aborted.
 type AbortReason struct {
-	TaskID  int       // ID of the task that caused abort
-	Attempt int       // retry attempt when abort occurred
-	Error   error     // the error that triggered abort
-	Time    time.Time // when abort was triggered
+	TaskID  int       // ID of the task that caused abort.
+	Attempt int       // retry attempt when abort occurred.
+	Error   error     // the error that triggered abort.
+	Time    time.Time // when abort was triggered.
 }
 
 // Result contains execution statistics.
 type Result struct {
-	Total     int // total items to process
-	Success   int // successfully processed items
-	Failed    int // failed items (after retries)
-	Retried   int // total retry attempts
-	Cancelled int // cancelled items
+	Total     int // total items to process.
+	Success   int // successfully processed items.
+	Failed    int // failed items (after retries).
+	Retried   int // total retry attempts.
+	Cancelled int // cancelled items.
 
-	Aborted     bool         // whether execution was aborted
-	AbortReason *AbortReason // abort details
+	Aborted     bool         // whether execution was aborted.
+	AbortReason *AbortReason // abort details.
 
-	StartTime time.Time // execution start time
-	EndTime   time.Time // execution end time
+	StartTime time.Time // execution start time.
+	EndTime   time.Time // execution end time.
 
-	ErrorSamples []ErrorSample  // error samples
-	ErrorCount   map[string]int // count per error message
+	ErrorSamples []ErrorSample  // error samples.
+	ErrorCount   map[string]int // count per error message.
 }
 
 // Duration returns the total execution duration.

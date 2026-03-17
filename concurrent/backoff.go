@@ -9,7 +9,7 @@ import (
 //
 // Example:
 //
-//	concurrent.ConstantBackoff(100 * time.Millisecond) // always returns 100ms
+//	concurrent.ConstantBackoff(100 * time.Millisecond)
 func ConstantBackoff(delay time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		return delay
@@ -21,7 +21,7 @@ func ConstantBackoff(delay time.Duration) BackoffFunc {
 //
 // Example:
 //
-//	concurrent.LinearBackoff(100 * time.Millisecond)(3) // returns 300ms
+//	concurrent.LinearBackoff(100 * time.Millisecond)(3)
 func LinearBackoff(base time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		return base * time.Duration(attempt)
@@ -34,7 +34,7 @@ func LinearBackoff(base time.Duration) BackoffFunc {
 //
 // Example:
 //
-//	concurrent.ExponentialBackoff(100*time.Millisecond, time.Second)(3) // returns 400ms
+//	concurrent.ExponentialBackoff(100*time.Millisecond, time.Second)(3)
 func ExponentialBackoff(base time.Duration, max time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		if attempt <= 0 {
@@ -59,7 +59,7 @@ func ExponentialBackoff(base time.Duration, max time.Duration) BackoffFunc {
 //
 // Example:
 //
-//	concurrent.FibonacciBackoff(100*time.Millisecond, time.Second)(5) // returns 500ms (fib(5)=5)
+//	concurrent.FibonacciBackoff(100*time.Millisecond, time.Second)(5)
 func FibonacciBackoff(base time.Duration, max time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		if attempt <= 0 {

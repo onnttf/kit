@@ -1,3 +1,4 @@
+// Package tree provides utilities to build and transform trees of nodes.
 package tree
 
 import (
@@ -23,7 +24,7 @@ type Builder struct {
 	dirty     bool // Indicates if relationships need rebuilding.
 }
 
-// NewBuilder returns a new Builder for creating tree structures
+// NewBuilder returns a new Builder for creating tree structures.
 //
 // Example:
 //
@@ -62,7 +63,7 @@ func (tb *Builder) WithNodes(nodes []*Node) *Builder {
 	return tb
 }
 
-// AddNode returns the Builder after adding a node with the specified key, parent, and sort order
+// AddNode adds a node with the specified key, parent, and sort order.
 //
 // Example:
 //
@@ -82,7 +83,7 @@ func (tb *Builder) AddNode(nodeKey, parentNodeKey string, sort int) *Builder {
 	return tb
 }
 
-// RemoveNode returns the Builder after removing a node and its descendants
+// RemoveNode removes a node and its descendants.
 //
 // Example:
 //
@@ -101,7 +102,7 @@ func (tb *Builder) RemoveNode(nodeKey string) *Builder {
 	return tb
 }
 
-// removeNodeRecursively removes a node and its descendants from the node map
+// removeNodeRecursively removes a node and its descendants from the node map.
 func (tb *Builder) removeNodeRecursively(node *Node) {
 	for _, child := range node.Children {
 		tb.removeNodeRecursively(child)
@@ -166,7 +167,7 @@ func (tb *Builder) isDescendant(ancestorKey, potentialDescendant string) bool {
 	return false
 }
 
-// UpdateNode returns the Builder after applying a transformation to a specific node
+// UpdateNode applies a transformation to a specific node.
 //
 // Example:
 //
@@ -239,7 +240,7 @@ func (tb *Builder) Transform(transformer func(*Node)) *Builder {
 	return tb
 }
 
-// Build returns the node map and sorted root nodes, ensuring relationships are updated
+// Build returns the node map and sorted root nodes.
 //
 // Example:
 //
@@ -272,7 +273,7 @@ func (tb *Builder) Clone() *Builder {
 	return newBuilder
 }
 
-// Validate returns errors for issues like cycles or orphaned nodes in the tree
+// Validate checks the tree for cycles and orphaned nodes and returns encountered errors.
 //
 // Example:
 //
@@ -283,7 +284,7 @@ func (tb *Builder) Validate() []error {
 	defer tb.mu.RUnlock()
 
 	tb.ensureBuiltLocked()
-	var errors []error
+	var errs []error
 
 	visited := make(map[string]bool)
 	recStack := make(map[string]bool)
@@ -309,7 +310,7 @@ func (tb *Builder) Validate() []error {
 
 	for _, node := range tb.nodeMap {
 		if !visited[node.Key] && hasCycle(node) {
-			errors = append(errors, fmt.Errorf("cycle detected in tree starting from node %s", node.Key))
+			errs = append(errs, fmt.Errorf("cycle in tree at node %q", node.Key))
 		}
 	}
 
@@ -328,11 +329,11 @@ func (tb *Builder) Validate() []error {
 
 	for key := range tb.nodeMap {
 		if !reachable[key] {
-			errors = append(errors, fmt.Errorf("orphaned node found: %s", key))
+			errs = append(errs, fmt.Errorf("orphaned node %q", key))
 		}
 	}
 
-	return errors
+	return errs
 }
 
 // Statistics returns metrics about the tree, including node count and depth
@@ -340,7 +341,7 @@ func (tb *Builder) Validate() []error {
 // Example:
 //
 //	stats := tb.Statistics()
-//	fmt.Println(stats["total_nodes"])
+//	fmt.Println(stats["totalNodes"])
 func (tb *Builder) Statistics() map[string]any {
 	tb.mu.RLock()
 	defer tb.mu.RUnlock()
@@ -348,17 +349,17 @@ func (tb *Builder) Statistics() map[string]any {
 	tb.ensureBuiltLocked()
 	stats := make(map[string]any)
 
-	stats["total_nodes"] = len(tb.nodeMap)
-	stats["root_nodes"] = len(tb.rootNodes)
-	stats["max_depth"] = tb.getMaxDepth()
-	stats["leaf_nodes"] = len(tb.getLeafNodes())
+	stats["totalNodes"] = len(tb.nodeMap)
+	stats["rootNodes"] = len(tb.rootNodes)
+	stats["maxDepth"] = tb.getMaxDepth()
+	stats["leafNodes"] = len(tb.getLeafNodes())
 
 	totalChildren := 0
 	for _, node := range tb.nodeMap {
 		totalChildren += len(node.Children)
 	}
 	if len(tb.nodeMap) > 0 {
-		stats["avg_children_per_node"] = float64(totalChildren) / float64(len(tb.nodeMap))
+		stats["avgChildrenPerNode"] = float64(totalChildren) / float64(len(tb.nodeMap))
 	}
 
 	return stats

@@ -1,7 +1,9 @@
 package excel
 
 import (
+	"errors"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -14,6 +16,11 @@ const excelTag = "excel"
 
 var structCache sync.Map // map[reflect.Type]structInfo
 
+// IsXLSX reports whether the file has an .xlsx extension.
+func IsXLSX(filename string) bool {
+	return strings.EqualFold(filepath.Ext(filename), ".xlsx")
+}
+
 type structField struct {
 	index int
 }
@@ -23,13 +30,18 @@ type structInfo struct {
 	fields map[int]structField
 }
 
-// IsXLSX reports whether name has the .xlsx extension.
-func IsXLSX(name string) bool {
-	return strings.HasSuffix(strings.ToLower(name), ".xlsx")
-}
-
 // Read reads all sheets from the Excel file at path.
 // The returned map keys are sheet names.
+//
+// Example:
+//
+//	data, err := excel.Read("test.xlsx")
+//	for sheetName, rows := range data {
+//	    fmt.Println("Sheet:", sheetName)
+//	    for _, row := range rows {
+//	        fmt.Println(row)
+//	    }
+//	}
 func Read(path string) (map[string][][]string, error) {
 	f, err := excelize.OpenFile(path)
 	if err != nil {
@@ -52,6 +64,13 @@ func Read(path string) (map[string][][]string, error) {
 }
 
 // ReadSheet reads a single sheet from the Excel file.
+//
+// Example:
+//
+//	rows, err := excel.ReadSheet("test.xlsx", "Sheet1")
+//	for _, row := range rows {
+//	    fmt.Println(row)
+//	}
 func ReadSheet(path, sheet string) ([][]string, error) {
 	f, err := excelize.OpenFile(path)
 	if err != nil {
@@ -64,7 +83,15 @@ func ReadSheet(path, sheet string) ([][]string, error) {
 
 // Walk reads the Excel file row by row and calls fn for each row.
 // It avoids loading the entire sheet into memory.
-func Walk(path, sheet string, fn func([]string) error) error {
+// The index is the 0-based row number.
+//
+// Example:
+//
+//	err := excel.Walk("test.xlsx", "Sheet1", func(index int, row []string) error {
+//	    fmt.Println(index, row)
+//	    return nil
+//	})
+func Walk(path, sheet string, fn func(index int, row []string) error) error {
 	f, err := excelize.OpenFile(path)
 	if err != nil {
 		return err
@@ -77,15 +104,17 @@ func Walk(path, sheet string, fn func([]string) error) error {
 	}
 	defer rows.Close()
 
+	index := 0
 	for rows.Next() {
 		columns, err := rows.Columns()
 		if err != nil {
 			return err
 		}
 
-		if err := fn(columns); err != nil {
+		if err := fn(index, columns); err != nil {
 			return err
 		}
+		index++
 	}
 
 	return rows.Error()
@@ -95,7 +124,20 @@ func Walk(path, sheet string, fn func([]string) error) error {
 // and calls fn for each row.
 //
 // Rows that fail to parse are skipped.
-func Scan[T any](path, sheet string, fn func(*T) error) error {
+// The index is the 0-based row number.
+//
+// Example:
+//
+//	type Person struct {
+//	    Name string `excel:"A"`
+//	    Age  int    `excel:"B"`
+//	}
+//
+//	err := excel.Scan("test.xlsx", "Sheet1", func(index int, row *Person) error {
+//	    fmt.Printf("Row %d: Name: %s, Age: %d\n", index, row.Name, row.Age)
+//	    return nil
+//	})
+func Scan[T any](path, sheet string, fn func(index int, row *T) error) error {
 	f, err := excelize.OpenFile(path)
 	if err != nil {
 		return err
@@ -110,6 +152,7 @@ func Scan[T any](path, sheet string, fn func(*T) error) error {
 
 	info := getStructInfo[T]()
 
+	index := 0
 	for rows.Next() {
 		columns, err := rows.Columns()
 		if err != nil {
@@ -118,14 +161,16 @@ func Scan[T any](path, sheet string, fn func(*T) error) error {
 
 		v, err := unmarshalRow(columns, info.typ, info.fields, 0)
 		if err != nil {
+			index++
 			continue
 		}
 
 		t := v.Interface().(T)
 
-		if err := fn(&t); err != nil {
+		if err := fn(index, &t); err != nil {
 			return err
 		}
+		index++
 	}
 
 	return rows.Error()
@@ -217,7 +262,7 @@ func columnIndex(col string) (int, error) {
 	col = strings.ToUpper(col)
 
 	if col == "" {
-		return 0, fmt.Errorf("empty column name")
+		return 0, errors.New("empty column name")
 	}
 
 	n := 0
@@ -311,7 +356,7 @@ func parseValue(v reflect.Value, s string) error {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		n, err := strconv.ParseInt(s, 10, 64)
 		if err != nil {
-			return fmt.Errorf("cannot parse %q as int: %w", s, err)
+			return fmt.Errorf("parse int %q: %w", s, err)
 		}
 
 		v.SetInt(n)
@@ -319,7 +364,7 @@ func parseValue(v reflect.Value, s string) error {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		n, err := strconv.ParseUint(s, 10, 64)
 		if err != nil {
-			return fmt.Errorf("cannot parse %q as uint: %w", s, err)
+			return fmt.Errorf("parse uint %q: %w", s, err)
 		}
 
 		v.SetUint(n)
@@ -327,7 +372,7 @@ func parseValue(v reflect.Value, s string) error {
 	case reflect.Float32, reflect.Float64:
 		n, err := strconv.ParseFloat(s, 64)
 		if err != nil {
-			return fmt.Errorf("cannot parse %q as float: %w", s, err)
+			return fmt.Errorf("parse float %q: %w", s, err)
 		}
 
 		v.SetFloat(n)
@@ -335,13 +380,13 @@ func parseValue(v reflect.Value, s string) error {
 	case reflect.Bool:
 		n, err := strconv.ParseBool(s)
 		if err != nil {
-			return fmt.Errorf("cannot parse %q as bool: %w", s, err)
+			return fmt.Errorf("parse bool %q: %w", s, err)
 		}
 
 		v.SetBool(n)
 
 	default:
-		return fmt.Errorf("unsupported type %v", v.Type())
+		return fmt.Errorf("unsupported type: %v", v.Type())
 	}
 
 	return nil

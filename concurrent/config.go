@@ -59,7 +59,7 @@ func (c *Config[T]) Validate() error {
 		return fmt.Errorf("concurrency must be > 0, got %d", c.Concurrency)
 	}
 	if c.MaxRetry < 0 {
-		return fmt.Errorf("maxRetry must be >= 0, got %d", c.MaxRetry)
+		return fmt.Errorf("max retry must be >= 0, got %d", c.MaxRetry)
 	}
 	if c.Timeout < 0 {
 		return fmt.Errorf("timeout must be >= 0, got %v", c.Timeout)

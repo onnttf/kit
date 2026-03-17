@@ -8,30 +8,30 @@ import (
 	"gorm.io/gorm"
 )
 
-// Repository defines a generic interface for CRUD operations on database entities of type T
+// Repository defines a generic interface for CRUD operations on database entities of type T.
 type Repository[T any] interface {
-	// Insert adds a new entity to the database
+	// Insert adds a new entity to the database.
 	Insert(ctx context.Context, db *gorm.DB, newValue *T) error
 
-	// BatchInsert adds multiple entities to the database in batches for efficiency
+	// BatchInsert adds multiple entities to the database in batches for efficiency.
 	BatchInsert(ctx context.Context, db *gorm.DB, newValues []*T, batchSize int) error
 
-	// Update modifies an existing entity using the specified scopes
+	// Update modifies an existing entity using the specified scopes.
 	Update(ctx context.Context, db *gorm.DB, newValue *T, scopes ...func(db *gorm.DB) *gorm.DB) error
 
-	// UpdateFields modifies specific fields of entities matching the provided scopes
+	// UpdateFields modifies specific fields of entities matching the provided scopes.
 	UpdateFields(ctx context.Context, db *gorm.DB, newValue map[string]any, scopes ...func(db *gorm.DB) *gorm.DB) error
 
-	// QueryOne retrieves a single entity matching the specified scopes, returning an error if no rows are found
+	// QueryOne retrieves a single entity matching the specified scopes, returning an error if no rows are found.
 	QueryOne(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) (*T, error)
 
-	// Query retrieves multiple entities matching the provided scopes
+	// Query retrieves multiple entities matching the provided scopes.
 	Query(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) ([]T, error)
 
-	// Count returns the number of entities matching the provided scopes
+	// Count returns the number of entities matching the provided scopes.
 	Count(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) (int64, error)
 
-	// Delete removes entities matching the provided scopes from the database
+	// Delete removes entities matching the provided scopes from the database.
 	Delete(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) error
 }
 
@@ -43,19 +43,20 @@ func NewRepo[T any]() *Repo[T] {
 	return &Repo[T]{}
 }
 
-// ErrDatabase defines an error for unexpected database operation failures
-var ErrDatabase = errors.New("unexpected error occurred")
+// ErrDatabase indicates an unexpected database operation failure.
+var ErrDatabase = errors.New("unexpected database error")
 
-// ErrNoRowsAffected defines an error for database operations that modified no rows
-var ErrNoRowsAffected = errors.New("no rows were modified")
+// ErrNoRowsAffected indicates a write operation did not affect any rows.
+var ErrNoRowsAffected = errors.New("no rows affected")
 
-// ErrNotFound defines an error for query operations that found no matching records
+// ErrNotFound indicates no records were found for a query.
 var ErrNotFound = errors.New("record not found")
 
-// handleExecError evaluates a GORM write operation (Insert/Update/Delete) and returns an error for failures or no rows affected
+// handleExecError evaluates a GORM write operation and returns an error on failure.
 func handleExecError(result *gorm.DB, action string) error {
 	if result.Error != nil {
-		return fmt.Errorf("%s: %w: %w", action, ErrDatabase, result.Error)
+		dbErr := fmt.Errorf("%w: %v", ErrDatabase, result.Error)
+		return fmt.Errorf("%s: %w", action, dbErr)
 	}
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("%s: %w", action, ErrNoRowsAffected)
@@ -63,31 +64,32 @@ func handleExecError(result *gorm.DB, action string) error {
 	return nil
 }
 
-// handleQueryError evaluates a GORM read operation and returns an error only for failures, not for empty results
+// handleQueryError evaluates a GORM query operation and returns an error on failure.
 func handleQueryError(result *gorm.DB, action string) error {
 	if result.Error != nil {
-		return fmt.Errorf("%s: %w: %w", action, ErrDatabase, result.Error)
+		dbErr := fmt.Errorf("%w: %v", ErrDatabase, result.Error)
+		return fmt.Errorf("%s: %w", action, dbErr)
 	}
 	return nil
 }
 
-// Insert adds a new entity to the database, returning an error if the input is nil
+// Insert adds a new entity to the database, returning an error if the input is nil.
 func (r *Repo[T]) Insert(ctx context.Context, db *gorm.DB, newValue *T) error {
 	if newValue == nil {
-		return fmt.Errorf("insert: input is nil")
+		return errors.New("nil value")
 	}
 	result := db.WithContext(ctx).Create(newValue)
 	return handleExecError(result, "insert")
 }
 
-// BatchInsert adds multiple entities to the database in batches, using a default batch size of 10 if unspecified
+// BatchInsert adds multiple entities to the database in batches, using a default batch size of 10 if unspecified.
 func (r *Repo[T]) BatchInsert(ctx context.Context, db *gorm.DB, newValues []*T, batchSize int) error {
 	if len(newValues) == 0 {
-		return fmt.Errorf("batch insert: input is empty")
+		return errors.New("empty slice")
 	}
 	for i, newValue := range newValues {
 		if newValue == nil {
-			return fmt.Errorf("batch insert: input at index %d is nil", i)
+			return fmt.Errorf("nil value at index %d", i)
 		}
 	}
 	if batchSize <= 0 {
@@ -97,19 +99,19 @@ func (r *Repo[T]) BatchInsert(ctx context.Context, db *gorm.DB, newValues []*T, 
 	return handleExecError(result, "batch insert")
 }
 
-// Update modifies an existing entity in the database, applying the specified scopes for filtering
+// Update modifies an existing entity in the database, applying the specified scopes for filtering.
 func (r *Repo[T]) Update(ctx context.Context, db *gorm.DB, newValue *T, scopes ...func(db *gorm.DB) *gorm.DB) error {
 	if newValue == nil {
-		return fmt.Errorf("update: input is nil")
+		return errors.New("nil value")
 	}
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Updates(newValue)
 	return handleExecError(result, "update")
 }
 
-// UpdateFields modifies specific fields of entities in the database, applying the specified scopes
+// UpdateFields modifies specific fields of entities in the database, applying the specified scopes.
 func (r *Repo[T]) UpdateFields(ctx context.Context, db *gorm.DB, newValue map[string]any, scopes ...func(db *gorm.DB) *gorm.DB) error {
 	if len(newValue) == 0 {
-		return fmt.Errorf("update fields: input is empty")
+		return errors.New("empty map")
 	}
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Updates(newValue)
 	return handleExecError(result, "update fields")
@@ -158,7 +160,7 @@ func (r *Repo[T]) Count(ctx context.Context, db *gorm.DB, scopes ...func(db *gor
 	return count, nil
 }
 
-// Delete removes entities from the database matching the specified scopes
+// Delete removes entities from the database matching the specified scopes.
 func (r *Repo[T]) Delete(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) error {
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Delete(new(T))
 	return handleExecError(result, "delete")

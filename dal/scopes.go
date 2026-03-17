@@ -54,7 +54,7 @@ func Condition(column string, value any) func(db *gorm.DB) *gorm.DB {
 // Example:
 //
 //	db.Scopes(OrderBy("created_at", "desc")).Find(&users)
-func OrderBy(field string, direction string) func(db *gorm.DB) *gorm.DB {
+func OrderBy(field, direction string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		dir := "ASC"
 		if strings.ToLower(direction) == "desc" {
@@ -82,7 +82,7 @@ func Limit(limit int) func(db *gorm.DB) *gorm.DB {
 // Example:
 //
 //	db.Scopes(Like("name", "john")).Find(&users) // WHERE name LIKE '%john%'
-func Like(column string, value string) func(db *gorm.DB) *gorm.DB {
+func Like(column, value string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" LIKE ?", "%"+value+"%")
 	}

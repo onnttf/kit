@@ -15,7 +15,7 @@ const (
 )
 
 // ErrExecutorReused is returned when attempting to reuse an Executor.
-var ErrExecutorReused = errors.New("executor already used; create a new one")
+var ErrExecutorReused = errors.New("executor already used")
 
 type execCounters struct {
 	success   atomic.Int64

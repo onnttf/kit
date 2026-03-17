@@ -10,10 +10,11 @@ const (
 	MsgTypeFeedCard   = "feedCard"
 )
 
-// Button orientation for ActionCardMsg.
 const (
-	BtnOrientationHorizontal = "0" // Horizontal button layout.
-	BtnOrientationVertical   = "1" // Vertical button layout.
+	// BtnOrientationHorizontal indicates horizontal button layout.
+	BtnOrientationHorizontal = "0"
+	// BtnOrientationVertical indicates vertical button layout.
+	BtnOrientationVertical = "1"
 )
 
 // Message is the interface implemented by all DingTalk messages.

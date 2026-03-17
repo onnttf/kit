@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -56,7 +57,7 @@ func (r *Robot) WithClient(client *http.Client) *Robot {
 // calculateSign generates the DingTalk message signature.
 func (r *Robot) calculateSign(timestamp int64) (string, error) {
 	if r.secret == "" {
-		return "", fmt.Errorf("secret is empty, cannot calculate sign")
+		return "", errors.New("empty secret")
 	}
 	stringToSign := fmt.Sprintf("%d\n%s", timestamp, r.secret)
 	h := hmac.New(sha256.New, []byte(r.secret))
@@ -87,21 +88,21 @@ func (r *Robot) Send(msg Message) error {
 //	err := robot.SendWithContext(ctx, msg)
 func (r *Robot) SendWithContext(ctx context.Context, msg Message) error {
 	if r.accessToken == "" {
-		return fmt.Errorf("access token is empty")
+		return errors.New("empty access token")
 	}
 	if r.httpClient == nil {
-		return fmt.Errorf("http client is nil")
+		return errors.New("nil http client")
 	}
 	if msg == nil {
-		return fmt.Errorf("message is nil")
+		return errors.New("nil message")
 	}
 
 	payload, err := msg.Payload()
 	if err != nil {
-		return fmt.Errorf("marshal message failed: %w", err)
+		return fmt.Errorf("marshal message: %w", err)
 	}
 	if len(payload) == 0 {
-		return fmt.Errorf("payload is empty")
+		return errors.New("empty payload")
 	}
 
 	timestamp := time.Now().UnixMilli()
@@ -109,29 +110,29 @@ func (r *Robot) SendWithContext(ctx context.Context, msg Message) error {
 	if r.secret != "" {
 		sign, err := r.calculateSign(timestamp)
 		if err != nil {
-			return fmt.Errorf("calculate sign failed: %w", err)
+			return fmt.Errorf("calculate sign: %w", err)
 		}
 		webhookURL = fmt.Sprintf("%s&timestamp=%d&sign=%s", webhookURL, timestamp, sign)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewBuffer(payload))
 	if err != nil {
-		return fmt.Errorf("create HTTP request failed: %w", err)
+		return fmt.Errorf("create http request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json;charset=utf-8")
 
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("HTTP post failed: %w", err)
+		return fmt.Errorf("http post: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("read response failed: %w", err)
+		return fmt.Errorf("read response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP status error: status=%s, body=%s", resp.Status, string(body))
+		return fmt.Errorf("unexpected http status: %s; body: %s", resp.Status, string(body))
 	}
 
 	var dingResp struct {
@@ -139,10 +140,10 @@ func (r *Robot) SendWithContext(ctx context.Context, msg Message) error {
 		ErrMsg  string `json:"errmsg"`
 	}
 	if err := json.Unmarshal(body, &dingResp); err != nil {
-		return fmt.Errorf("unmarshal response failed: %w, body=%s", err, string(body))
+		return fmt.Errorf("unmarshal response: %w; body: %s", err, string(body))
 	}
 	if dingResp.ErrCode != 0 {
-		return fmt.Errorf("API returned error: errcode=%d, errmsg=%s", dingResp.ErrCode, dingResp.ErrMsg)
+		return fmt.Errorf("dingtalk api error: errcode=%d, errmsg=%s", dingResp.ErrCode, dingResp.ErrMsg)
 	}
 	return nil
 }
