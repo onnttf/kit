@@ -9,7 +9,7 @@ import (
 // Example:
 //
 //	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC)
-//	StartOfDay(t) // returns 2024-03-15 00:00:00
+//	StartOfDay(t)
 func StartOfDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
@@ -19,7 +19,7 @@ func StartOfDay(t time.Time) time.Time {
 // Example:
 //
 //	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC)
-//	EndOfDay(t) // returns 2024-03-15 23:59:59
+//	EndOfDay(t)
 func EndOfDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 0, t.Location())
 }
@@ -28,8 +28,8 @@ func EndOfDay(t time.Time) time.Time {
 //
 // Example:
 //
-//	IsWeekend(time.Date(2024, 3, 16, 0, 0, 0, 0, time.UTC)) // returns true (Saturday)
-//	IsWeekend(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC)) // returns false (Friday)
+//	IsWeekend(time.Date(2024, 3, 16, 0, 0, 0, 0, time.UTC))
+//	IsWeekend(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
 func IsWeekend(t time.Time) bool {
 	weekday := t.Weekday()
 	return weekday == time.Saturday || weekday == time.Sunday
@@ -39,8 +39,8 @@ func IsWeekend(t time.Time) bool {
 //
 // Example:
 //
-//	IsWeekday(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC)) // returns true (Friday)
-//	IsWeekday(time.Date(2024, 3, 16, 0, 0, 0, 0, time.UTC)) // returns false (Saturday)
+//	IsWeekday(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
+//	IsWeekday(time.Date(2024, 3, 16, 0, 0, 0, 0, time.UTC))
 func IsWeekday(t time.Time) bool {
 	return !IsWeekend(t)
 }
@@ -51,7 +51,7 @@ func IsWeekday(t time.Time) bool {
 // Example:
 //
 //	t := time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC) // Friday
-//	AddBusinessDays(t, 1) // returns Monday 2024-03-18
+//	AddBusinessDays(t, 1)
 func AddBusinessDays(t time.Time, days int) time.Time {
 	current := t
 	remain := days
@@ -76,7 +76,7 @@ func AddBusinessDays(t time.Time, days int) time.Time {
 //
 //	start := time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC) // Friday
 //	end := time.Date(2024, 3, 18, 0, 0, 0, 0, time.UTC)   // Monday
-//	BusinessDaysBetween(start, end) // returns 1
+//	BusinessDaysBetween(start, end)
 func BusinessDaysBetween(start, end time.Time) int {
 	if start.After(end) {
 		start, end = end, start
@@ -97,7 +97,7 @@ func BusinessDaysBetween(start, end time.Time) int {
 // Example:
 //
 //	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC) // Friday
-//	StartOfWeek(t) // returns Monday 2024-03-11 00:00:00
+//	StartOfWeek(t)
 func StartOfWeek(t time.Time) time.Time {
 	weekday := int(t.Weekday())
 	if weekday == 0 {
@@ -111,7 +111,7 @@ func StartOfWeek(t time.Time) time.Time {
 // Example:
 //
 //	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC) // Friday
-//	EndOfWeek(t) // returns Sunday 2024-03-17 23:59:59
+//	EndOfWeek(t)
 func EndOfWeek(t time.Time) time.Time {
 	weekday := int(t.Weekday())
 	if weekday == 0 {
@@ -125,7 +125,7 @@ func EndOfWeek(t time.Time) time.Time {
 // Example:
 //
 //	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC)
-//	StartOfMonth(t) // returns 2024-03-01 00:00:00
+//	StartOfMonth(t)
 func StartOfMonth(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
 }
@@ -135,7 +135,7 @@ func StartOfMonth(t time.Time) time.Time {
 // Example:
 //
 //	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC)
-//	EndOfMonth(t) // returns 2024-03-31 23:59:59
+//	EndOfMonth(t)
 func EndOfMonth(t time.Time) time.Time {
 	return EndOfDay(t.AddDate(0, 1, -1))
 }
@@ -145,7 +145,7 @@ func EndOfMonth(t time.Time) time.Time {
 // Example:
 //
 //	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC)
-//	StartOfYear(t) // returns 2024-01-01 00:00:00
+//	StartOfYear(t)
 func StartOfYear(t time.Time) time.Time {
 	return time.Date(t.Year(), 1, 1, 0, 0, 0, 0, t.Location())
 }
@@ -155,7 +155,7 @@ func StartOfYear(t time.Time) time.Time {
 // Example:
 //
 //	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC)
-//	EndOfYear(t) // returns 2024-12-31 23:59:59
+//	EndOfYear(t)
 func EndOfYear(t time.Time) time.Time {
 	return EndOfDay(time.Date(t.Year(), 12, 31, 0, 0, 0, 0, t.Location()))
 }
@@ -174,7 +174,7 @@ func ParseInLocation(layout, value string, location *time.Location) (time.Time, 
 //
 // Example:
 //
-//	ParseInBeijing("2006-01-02 15:04", "2024-03-15 14:30") // returns 2024-03-15 14:30 +0800 CST
+//	ParseInBeijing("2006-01-02 15:04", "2024-03-15 14:30")
 func ParseInBeijing(layout, value string) (time.Time, error) {
 	location, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {

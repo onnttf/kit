@@ -50,7 +50,7 @@ type BackoffFunc func(attempt int) time.Duration
 
 // workItem represents a single unit of work.
 type workItem[T any] struct {
-	id      int // unique identifier
-	data    T   // item to process
-	attempt int // retry attempt (0-based)
+	id      int // unique identifier.
+	data    T   // item to process.
+	attempt int // retry attempt (0-based).
 }

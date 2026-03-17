@@ -115,7 +115,7 @@ func TestWalk(t *testing.T) {
 	defer os.Remove(testFile)
 
 	var rows [][]string
-	err := Walk(testFile, "Sheet1", func(row []string) error {
+	err := Walk(testFile, "Sheet1", func(index int, row []string) error {
 		rows = append(rows, row)
 		return nil
 	})
@@ -141,8 +141,8 @@ func TestScan(t *testing.T) {
 	defer os.Remove(testFile)
 
 	var people []*Person
-	err := Scan(testFile, "Sheet1", func(p *Person) error {
-		people = append(people, p)
+	err := Scan(testFile, "Sheet1", func(index int, row *Person) error {
+		people = append(people, row)
 		return nil
 	})
 	require.NoError(t, err)

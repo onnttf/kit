@@ -1,29 +1,29 @@
 package container
 
-// Difference returns elements in sliceA that are not present in sliceB.
-// Returns nil if sliceA is nil, or a copy of sliceA if sliceB is nil/empty.
+// Difference returns elements in s1 that are not present in s2.
+// Returns nil if s1 is nil, or a copy of s1 if s2 is nil/empty.
 //
 // Example:
 //
-//	Difference([]int{1, 2, 3}, []int{2}) // returns []int{1, 3}
-func Difference[T comparable](sliceA, sliceB []T) []T {
-	if sliceA == nil {
+//	Difference([]int{1, 2, 3}, []int{2})
+func Difference[T comparable](s1, s2 []T) []T {
+	if s1 == nil {
 		return nil
 	}
 
-	if len(sliceB) == 0 {
-		result := make([]T, len(sliceA))
-		copy(result, sliceA)
+	if len(s2) == 0 {
+		result := make([]T, len(s1))
+		copy(result, s1)
 		return result
 	}
 
-	lookup := make(map[T]struct{}, len(sliceB))
-	for _, item := range sliceB {
+	lookup := make(map[T]struct{}, len(s2))
+	for _, item := range s2 {
 		lookup[item] = struct{}{}
 	}
 
-	result := make([]T, 0, len(sliceA))
-	for _, item := range sliceA {
+	result := make([]T, 0, len(s1))
+	for _, item := range s1 {
 		if _, found := lookup[item]; !found {
 			result = append(result, item)
 		}
@@ -32,32 +32,32 @@ func Difference[T comparable](sliceA, sliceB []T) []T {
 	return result
 }
 
-// Intersection returns elements common to both sliceA and sliceB, preserving uniqueness.
+// Intersection returns elements common to both s1 and s2, preserving uniqueness.
 // Returns nil if either slice is nil, or an empty slice if there are no common elements.
 //
 // Example:
 //
-//	Intersection([]int{1, 2, 3}, []int{2, 3, 4}) // returns []int{2, 3}
-func Intersection[T comparable](sliceA, sliceB []T) []T {
-	if sliceA == nil || sliceB == nil {
+//	Intersection([]int{1, 2, 3}, []int{2, 3, 4})
+func Intersection[T comparable](s1, s2 []T) []T {
+	if s1 == nil || s2 == nil {
 		return nil
 	}
 
-	if len(sliceA) == 0 || len(sliceB) == 0 {
+	if len(s1) == 0 || len(s2) == 0 {
 		return []T{}
 	}
 
-	lookup := make(map[T]struct{}, len(sliceB))
-	for _, item := range sliceB {
+	lookup := make(map[T]struct{}, len(s2))
+	for _, item := range s2 {
 		lookup[item] = struct{}{}
 	}
 
 	// Pre-allocate with smaller capacity estimate
-	estimatedCap := min(len(sliceA), len(sliceB))
+	estimatedCap := min(len(s1), len(s2))
 	result := make([]T, 0, estimatedCap)
 	seen := make(map[T]struct{}, estimatedCap)
 
-	for _, item := range sliceA {
+	for _, item := range s1 {
 		if _, found := lookup[item]; found {
 			if _, added := seen[item]; !added {
 				result = append(result, item)
@@ -69,29 +69,29 @@ func Intersection[T comparable](sliceA, sliceB []T) []T {
 	return result
 }
 
-// Union returns all unique elements from sliceA and sliceB, preserving the order of first occurrence.
+// Union returns all unique elements from s1 and s2, preserving the order of first occurrence.
 // Returns nil if both slices are nil.
 //
 // Example:
 //
-//	Union([]int{1, 2}, []int{2, 3}) // returns []int{1, 2, 3}
-func Union[T comparable](sliceA, sliceB []T) []T {
-	if sliceA == nil && sliceB == nil {
+//	Union([]int{1, 2}, []int{2, 3})
+func Union[T comparable](s1, s2 []T) []T {
+	if s1 == nil && s2 == nil {
 		return nil
 	}
 
-	totalLen := len(sliceA) + len(sliceB)
+	totalLen := len(s1) + len(s2)
 	result := make([]T, 0, totalLen)
 	seen := make(map[T]struct{}, totalLen)
 
-	for _, item := range sliceA {
+	for _, item := range s1 {
 		if _, exists := seen[item]; !exists {
 			result = append(result, item)
 			seen[item] = struct{}{}
 		}
 	}
 
-	for _, item := range sliceB {
+	for _, item := range s2 {
 		if _, exists := seen[item]; !exists {
 			result = append(result, item)
 			seen[item] = struct{}{}
@@ -106,9 +106,9 @@ func Union[T comparable](sliceA, sliceB []T) []T {
 //
 // Example:
 //
-//	Deduplicate([]int{1, 2, 2, 3}) // returns []int{1, 2, 3}
-//	Deduplicate([]int(nil))        // returns nil
-//	Deduplicate([]int{})           // returns []int{}
+//	Deduplicate([]int{1, 2, 2, 3})
+//	Deduplicate([]int(nil))
+//	Deduplicate([]int{})
 func Deduplicate[T comparable](input []T) []T {
 	if input == nil {
 		return nil
@@ -139,7 +139,6 @@ func Deduplicate[T comparable](input []T) []T {
 //
 //	users := []User{{ID: 1, Name: "Alice"}, {ID: 2, Name: "Bob"}}
 //	userMap := ToMap(users, func(u User) int { return u.ID })
-//	// userMap is map[int]User{1: {ID: 1, Name: "Alice"}, 2: {ID: 2, Name: "Bob"}}
 func ToMap[T any, K comparable](input []T, keySelector func(T) K) map[K]T {
 	if len(input) == 0 {
 		return make(map[K]T)
@@ -159,7 +158,7 @@ func ToMap[T any, K comparable](input []T, keySelector func(T) K) map[K]T {
 //
 // Example:
 //
-//	FlatMap([]int{1, 2}, func(x int) []int { return []int{x, x*2} }) // returns []int{1, 2, 2, 4}
+//	FlatMap([]int{1, 2}, func(x int) []int { return []int{x, x*2} })
 func FlatMap[T any, R any](input []T, mapper func(T) []R) []R {
 	if input == nil {
 		return nil
@@ -176,7 +175,7 @@ func FlatMap[T any, R any](input []T, mapper func(T) []R) []R {
 //
 // Example:
 //
-//	Reduce([]int{1, 2, 3}, 0, func(sum, x int) int { return sum + x }) // returns 6
+//	Reduce([]int{1, 2, 3}, 0, func(sum, x int) int { return sum + x })
 func Reduce[T any, R any](input []T, initial R, reducer func(R, T) R) R {
 	result := initial
 	for _, item := range input {
@@ -190,7 +189,7 @@ func Reduce[T any, R any](input []T, initial R, reducer func(R, T) R) R {
 //
 // Example:
 //
-//	Chunk([]int{1, 2, 3, 4, 5}, 2) // returns [][]int{{1, 2}, {3, 4}, {5}}
+//	Chunk([]int{1, 2, 3, 4, 5}, 2)
 func Chunk[T any](input []T, size int) [][]T {
 	if input == nil {
 		return nil
@@ -211,7 +210,7 @@ func Chunk[T any](input []T, size int) [][]T {
 //
 // Example:
 //
-//	First([]int{1, 2, 3}, func(x int) bool { return x > 1 }) // returns 2, true
+//	First([]int{1, 2, 3}, func(x int) bool { return x > 1 })
 func First[T any](input []T, predicate func(T) bool) (T, bool) {
 	for _, item := range input {
 		if predicate(item) {
@@ -226,7 +225,7 @@ func First[T any](input []T, predicate func(T) bool) (T, bool) {
 //
 // Example:
 //
-//	Partition([]int{1, 2, 3, 4}, func(x int) bool { return x%2 == 0 }) // returns []int{2, 4}, []int{1, 3}
+//	Partition([]int{1, 2, 3, 4}, func(x int) bool { return x%2 == 0 })
 func Partition[T any](input []T, predicate func(T) bool) (matches []T, nonMatches []T) {
 	matches = make([]T, 0)
 	nonMatches = make([]T, 0)
