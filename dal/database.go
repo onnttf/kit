@@ -76,7 +76,7 @@ func handleQueryError(result *gorm.DB, action string) error {
 // Insert adds a new entity to the database, returning an error if the input is nil.
 func (r *Repo[T]) Insert(ctx context.Context, db *gorm.DB, newValue *T) error {
 	if newValue == nil {
-		return errors.New("nil value")
+		return errors.New("newValue is nil")
 	}
 	result := db.WithContext(ctx).Create(newValue)
 	return handleExecError(result, "insert")
@@ -85,11 +85,11 @@ func (r *Repo[T]) Insert(ctx context.Context, db *gorm.DB, newValue *T) error {
 // BatchInsert adds multiple entities to the database in batches, using a default batch size of 10 if unspecified.
 func (r *Repo[T]) BatchInsert(ctx context.Context, db *gorm.DB, newValues []*T, batchSize int) error {
 	if len(newValues) == 0 {
-		return errors.New("empty slice")
+		return errors.New("newValues is empty")
 	}
 	for i, newValue := range newValues {
 		if newValue == nil {
-			return fmt.Errorf("nil value at index %d", i)
+			return fmt.Errorf("newValues[%d] is nil", i)
 		}
 	}
 	if batchSize <= 0 {
@@ -102,7 +102,7 @@ func (r *Repo[T]) BatchInsert(ctx context.Context, db *gorm.DB, newValues []*T, 
 // Update modifies an existing entity in the database, applying the specified scopes for filtering.
 func (r *Repo[T]) Update(ctx context.Context, db *gorm.DB, newValue *T, scopes ...func(db *gorm.DB) *gorm.DB) error {
 	if newValue == nil {
-		return errors.New("nil value")
+		return errors.New("newValue is nil")
 	}
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Updates(newValue)
 	return handleExecError(result, "update")
@@ -111,7 +111,7 @@ func (r *Repo[T]) Update(ctx context.Context, db *gorm.DB, newValue *T, scopes .
 // UpdateFields modifies specific fields of entities in the database, applying the specified scopes.
 func (r *Repo[T]) UpdateFields(ctx context.Context, db *gorm.DB, newValue map[string]any, scopes ...func(db *gorm.DB) *gorm.DB) error {
 	if len(newValue) == 0 {
-		return errors.New("empty map")
+		return errors.New("newValue is empty")
 	}
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Updates(newValue)
 	return handleExecError(result, "update fields")

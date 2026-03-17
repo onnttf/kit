@@ -130,7 +130,7 @@ func TestValidate_CycleAndOrphan(t *testing.T) {
 	errs := tb.Validate()
 	hasCycle := false
 	for _, err := range errs {
-		if strings.Contains(err.Error(), "cycle in tree") {
+		if strings.Contains(err.Error(), "cycle detected") {
 			hasCycle = true
 		}
 	}
@@ -150,7 +150,7 @@ func TestValidate_CycleAndOrphan(t *testing.T) {
 	t.Log("rootNodes:", tb.rootNodes)
 	t.Log("Validate errs:")
 	for _, err := range errs {
-		if strings.Contains(err.Error(), "orphaned node") && strings.Contains(err.Error(), "2") {
+		if strings.Contains(err.Error(), "orphan node") && strings.Contains(err.Error(), "2") {
 			hasOrphan = true
 		}
 	}

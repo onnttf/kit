@@ -262,14 +262,14 @@ func columnIndex(col string) (int, error) {
 	col = strings.ToUpper(col)
 
 	if col == "" {
-		return 0, errors.New("empty column name")
+		return 0, errors.New("column name is empty")
 	}
 
 	n := 0
 
 	for _, c := range col {
 		if c < 'A' || c > 'Z' {
-			return 0, fmt.Errorf("invalid column name %q", col)
+			return 0, fmt.Errorf("column name is invalid: %q", col)
 		}
 
 		n = n*26 + int(c-'A'+1)

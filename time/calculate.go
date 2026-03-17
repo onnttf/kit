@@ -8,8 +8,7 @@ import (
 //
 // Example:
 //
-//	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC)
-//	StartOfDay(t)
+//	StartOfDay(time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC))
 func StartOfDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
@@ -18,8 +17,7 @@ func StartOfDay(t time.Time) time.Time {
 //
 // Example:
 //
-//	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC)
-//	EndOfDay(t)
+//	EndOfDay(time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC))
 func EndOfDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 0, t.Location())
 }
@@ -29,7 +27,6 @@ func EndOfDay(t time.Time) time.Time {
 // Example:
 //
 //	IsWeekend(time.Date(2024, 3, 16, 0, 0, 0, 0, time.UTC))
-//	IsWeekend(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
 func IsWeekend(t time.Time) bool {
 	weekday := t.Weekday()
 	return weekday == time.Saturday || weekday == time.Sunday
@@ -40,7 +37,6 @@ func IsWeekend(t time.Time) bool {
 // Example:
 //
 //	IsWeekday(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
-//	IsWeekday(time.Date(2024, 3, 16, 0, 0, 0, 0, time.UTC))
 func IsWeekday(t time.Time) bool {
 	return !IsWeekend(t)
 }
@@ -50,8 +46,7 @@ func IsWeekday(t time.Time) bool {
 //
 // Example:
 //
-//	t := time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC) // Friday
-//	AddBusinessDays(t, 1)
+//	AddBusinessDays(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC), 1)
 func AddBusinessDays(t time.Time, days int) time.Time {
 	current := t
 	remain := days
@@ -74,9 +69,10 @@ func AddBusinessDays(t time.Time, days int) time.Time {
 //
 // Example:
 //
-//	start := time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC) // Friday
-//	end := time.Date(2024, 3, 18, 0, 0, 0, 0, time.UTC)   // Monday
-//	BusinessDaysBetween(start, end)
+//	BusinessDaysBetween(
+//		time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC),
+//		time.Date(2024, 3, 18, 0, 0, 0, 0, time.UTC),
+//	)
 func BusinessDaysBetween(start, end time.Time) int {
 	if start.After(end) {
 		start, end = end, start
@@ -96,8 +92,7 @@ func BusinessDaysBetween(start, end time.Time) int {
 //
 // Example:
 //
-//	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC) // Friday
-//	StartOfWeek(t)
+//	StartOfWeek(time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC))
 func StartOfWeek(t time.Time) time.Time {
 	weekday := int(t.Weekday())
 	if weekday == 0 {
@@ -110,8 +105,7 @@ func StartOfWeek(t time.Time) time.Time {
 //
 // Example:
 //
-//	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC) // Friday
-//	EndOfWeek(t)
+//	EndOfWeek(time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC))
 func EndOfWeek(t time.Time) time.Time {
 	weekday := int(t.Weekday())
 	if weekday == 0 {
@@ -124,8 +118,7 @@ func EndOfWeek(t time.Time) time.Time {
 //
 // Example:
 //
-//	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC)
-//	StartOfMonth(t)
+//	StartOfMonth(time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC))
 func StartOfMonth(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
 }
@@ -134,8 +127,7 @@ func StartOfMonth(t time.Time) time.Time {
 //
 // Example:
 //
-//	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC)
-//	EndOfMonth(t)
+//	EndOfMonth(time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC))
 func EndOfMonth(t time.Time) time.Time {
 	return EndOfDay(t.AddDate(0, 1, -1))
 }
@@ -144,8 +136,7 @@ func EndOfMonth(t time.Time) time.Time {
 //
 // Example:
 //
-//	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC)
-//	StartOfYear(t)
+//	StartOfYear(time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC))
 func StartOfYear(t time.Time) time.Time {
 	return time.Date(t.Year(), 1, 1, 0, 0, 0, 0, t.Location())
 }
@@ -154,8 +145,7 @@ func StartOfYear(t time.Time) time.Time {
 //
 // Example:
 //
-//	t := time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC)
-//	EndOfYear(t)
+//	EndOfYear(time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC))
 func EndOfYear(t time.Time) time.Time {
 	return EndOfDay(time.Date(t.Year(), 12, 31, 0, 0, 0, 0, t.Location()))
 }
