@@ -90,7 +90,7 @@ func TestRepo_Insert_NilInput(t *testing.T) {
 		t.Fatal("Expected error for nil input")
 	}
 
-	if err.Error() != "nil value" {
+	if err.Error() != "newValue is nil" {
 		t.Errorf("Expected 'nil value', got %v", err)
 	}
 }
@@ -125,7 +125,7 @@ func TestRepo_BatchInsert_EmptyInput(t *testing.T) {
 		t.Fatal("Expected error for empty input")
 	}
 
-	if err.Error() != "empty slice" {
+	if err.Error() != "newValues is empty" {
 		t.Errorf("Expected 'empty slice', got %v", err)
 	}
 }
@@ -146,7 +146,7 @@ func TestRepo_BatchInsert_NilElement(t *testing.T) {
 		t.Fatal("Expected error for nil element")
 	}
 
-	expectedMsg := "nil value at index 1"
+	expectedMsg := "newValues[1] is nil"
 	if err.Error() != expectedMsg {
 		t.Errorf("Expected '%s', got %v", expectedMsg, err)
 	}
@@ -181,7 +181,7 @@ func TestRepo_Update_NilInput(t *testing.T) {
 		t.Fatal("Expected error for nil input")
 	}
 
-	if err.Error() != "nil value" {
+	if err.Error() != "newValue is nil" {
 		t.Errorf("Expected 'nil value', got %v", err)
 	}
 }
@@ -211,7 +211,7 @@ func TestRepo_UpdateFields_EmptyInput(t *testing.T) {
 		t.Fatal("Expected error for empty input")
 	}
 
-	if err.Error() != "empty map" {
+	if err.Error() != "newValue is empty" {
 		t.Errorf("Expected 'empty map', got %v", err)
 	}
 }

@@ -54,18 +54,6 @@ func (r *Robot) WithClient(client *http.Client) *Robot {
 	return r
 }
 
-// calculateSign generates the DingTalk message signature.
-func (r *Robot) calculateSign(timestamp int64) (string, error) {
-	if r.secret == "" {
-		return "", errors.New("empty secret")
-	}
-	stringToSign := fmt.Sprintf("%d\n%s", timestamp, r.secret)
-	h := hmac.New(sha256.New, []byte(r.secret))
-	h.Write([]byte(stringToSign))
-	sign := base64.StdEncoding.EncodeToString(h.Sum(nil))
-	return url.QueryEscape(sign), nil
-}
-
 // Send posts the message payload to DingTalk using a default context with 5 second timeout.
 // For custom timeout or cancellation control, use SendWithContext instead.
 //
@@ -88,13 +76,13 @@ func (r *Robot) Send(msg Message) error {
 //	err := robot.SendWithContext(ctx, msg)
 func (r *Robot) SendWithContext(ctx context.Context, msg Message) error {
 	if r.accessToken == "" {
-		return errors.New("empty access token")
+		return errors.New("access token is empty")
 	}
 	if r.httpClient == nil {
-		return errors.New("nil http client")
+		return errors.New("http client is nil")
 	}
 	if msg == nil {
-		return errors.New("nil message")
+		return errors.New("message is nil")
 	}
 
 	payload, err := msg.Payload()
@@ -102,7 +90,7 @@ func (r *Robot) SendWithContext(ctx context.Context, msg Message) error {
 		return fmt.Errorf("marshal message: %w", err)
 	}
 	if len(payload) == 0 {
-		return errors.New("empty payload")
+		return errors.New("payload is empty")
 	}
 
 	timestamp := time.Now().UnixMilli()
@@ -123,7 +111,7 @@ func (r *Robot) SendWithContext(ctx context.Context, msg Message) error {
 
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("http post: %w", err)
+		return fmt.Errorf("send http request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -132,7 +120,7 @@ func (r *Robot) SendWithContext(ctx context.Context, msg Message) error {
 		return fmt.Errorf("read response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected http status: %s; body: %s", resp.Status, string(body))
+		return fmt.Errorf("unexpected http status: code=%d, body=%s", resp.StatusCode, string(body))
 	}
 
 	var dingResp struct {
@@ -140,10 +128,22 @@ func (r *Robot) SendWithContext(ctx context.Context, msg Message) error {
 		ErrMsg  string `json:"errmsg"`
 	}
 	if err := json.Unmarshal(body, &dingResp); err != nil {
-		return fmt.Errorf("unmarshal response: %w; body: %s", err, string(body))
+		return fmt.Errorf("unmarshal response: %w, body=%s", err, string(body))
 	}
 	if dingResp.ErrCode != 0 {
-		return fmt.Errorf("dingtalk api error: errcode=%d, errmsg=%s", dingResp.ErrCode, dingResp.ErrMsg)
+		return fmt.Errorf("unexpected response: errcode=%d, errmsg=%s", dingResp.ErrCode, dingResp.ErrMsg)
 	}
 	return nil
+}
+
+// calculateSign generates the DingTalk message signature.
+func (r *Robot) calculateSign(timestamp int64) (string, error) {
+	if r.secret == "" {
+		return "", errors.New("secret is empty")
+	}
+	stringToSign := fmt.Sprintf("%d\n%s", timestamp, r.secret)
+	h := hmac.New(sha256.New, []byte(r.secret))
+	h.Write([]byte(stringToSign))
+	sign := base64.StdEncoding.EncodeToString(h.Sum(nil))
+	return url.QueryEscape(sign), nil
 }

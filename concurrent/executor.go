@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -326,7 +325,7 @@ func (e *Executor[T]) execute(
 
 	defer func() {
 		if p := recover(); p != nil {
-			err = fmt.Errorf("panic: %v\n%s", p, debug.Stack())
+			err = fmt.Errorf("panic recovered: err=%v", p)
 			if e.config.PanicPolicy(p, item.data, item.attempt) == ActionAbort {
 				e.abort(item, err)
 				ctxCancel()

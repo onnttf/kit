@@ -4,8 +4,7 @@ package ptr
 //
 // Example:
 //
-//	x := 42
-//	p := To(x)
+//	p := To(42)
 func To[T any](v T) *T {
 	val := v
 	return &val
@@ -15,8 +14,7 @@ func To[T any](v T) *T {
 //
 // Example:
 //
-//	p := To(42)
-//	DerefOr(p, 0)
+//	DerefOr(To(42), 0)
 //	DerefOr(nil, 100)
 func DerefOr[T any](p *T, defaultVal T) T {
 	if p == nil {
@@ -42,8 +40,7 @@ func ToIf[T any](cond bool, v T) *T {
 //
 // Example:
 //
-//	var p *int
-//	IsNil(p)
+//	IsNil((*int)(nil))
 //	IsNil(To(42))
 func IsNil[T any](p *T) bool {
 	return p == nil
@@ -53,8 +50,7 @@ func IsNil[T any](p *T) bool {
 //
 // Example:
 //
-//	var p *int
-//	IsNotNil(p)
+//	IsNotNil((*int)(nil))
 //	IsNotNil(To(42))
 func IsNotNil[T any](p *T) bool {
 	return p != nil
@@ -73,9 +69,8 @@ func Zero[T any]() *T {
 //
 // Example:
 //
-//	p := To(42)
-//	Deref(p)
-//	Deref(nil)
+//	Deref(To(42))
+//	Deref[int](nil)
 func Deref[T any](p *T) T {
 	var zero T
 	return DerefOr(p, zero)

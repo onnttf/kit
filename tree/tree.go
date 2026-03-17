@@ -1,4 +1,3 @@
-// Package tree provides utilities to build and transform trees of nodes.
 package tree
 
 import (
@@ -310,7 +309,7 @@ func (tb *Builder) Validate() []error {
 
 	for _, node := range tb.nodeMap {
 		if !visited[node.Key] && hasCycle(node) {
-			errs = append(errs, fmt.Errorf("cycle in tree at node %q", node.Key))
+			errs = append(errs, fmt.Errorf("cycle detected at node %q", node.Key))
 		}
 	}
 
@@ -329,7 +328,7 @@ func (tb *Builder) Validate() []error {
 
 	for key := range tb.nodeMap {
 		if !reachable[key] {
-			errs = append(errs, fmt.Errorf("orphaned node %q", key))
+			errs = append(errs, fmt.Errorf("orphan node %q", key))
 		}
 	}
 
