@@ -31,17 +31,15 @@ type Repository[T any] interface {
 	// Count returns the number of entities matching the provided scopes.
 	Count(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) (int64, error)
 
+	// Raw executes a raw SQL query and scans results into type T.
+	Raw(ctx context.Context, db *gorm.DB, sql string, args ...any) ([]T, error)
+
 	// Delete removes entities matching the provided scopes from the database.
 	Delete(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) error
 }
 
-// Repo provides a generic implementation of the Repository interface
+// Repo provides a generic implementation of the Repository interface.
 type Repo[T any] struct{}
-
-// NewRepo creates a new repository instance for type T
-func NewRepo[T any]() *Repo[T] {
-	return &Repo[T]{}
-}
 
 // ErrDatabase indicates an unexpected database operation failure.
 var ErrDatabase = errors.New("unexpected database error")
@@ -52,25 +50,9 @@ var ErrNoRowsAffected = errors.New("no rows affected")
 // ErrNotFound indicates no records were found for a query.
 var ErrNotFound = errors.New("record not found")
 
-// handleExecError evaluates a GORM write operation and returns an error on failure.
-func handleExecError(result *gorm.DB, action string) error {
-	if result.Error != nil {
-		dbErr := fmt.Errorf("%w: %v", ErrDatabase, result.Error)
-		return fmt.Errorf("%s: %w", action, dbErr)
-	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("%s: %w", action, ErrNoRowsAffected)
-	}
-	return nil
-}
-
-// handleQueryError evaluates a GORM query operation and returns an error on failure.
-func handleQueryError(result *gorm.DB, action string) error {
-	if result.Error != nil {
-		dbErr := fmt.Errorf("%w: %v", ErrDatabase, result.Error)
-		return fmt.Errorf("%s: %w", action, dbErr)
-	}
-	return nil
+// NewRepo creates a new repository instance for type T.
+func NewRepo[T any]() *Repo[T] {
+	return &Repo[T]{}
 }
 
 // Insert adds a new entity to the database, returning an error if the input is nil.
@@ -164,4 +146,56 @@ func (r *Repo[T]) Count(ctx context.Context, db *gorm.DB, scopes ...func(db *gor
 func (r *Repo[T]) Delete(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) error {
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Delete(new(T))
 	return handleExecError(result, "delete")
+}
+
+// Raw executes a raw SQL query and scans results into type T.
+// Use this for complex queries like aggregations, joins, or custom SQL.
+//
+// Example:
+//
+//	type StatResult struct {
+//	    Total int64  `json:"total"`
+//	    Name  string `json:"name"`
+//	}
+//	repo := dal.NewRepo[StatResult]()
+//	results, err := repo.Raw(ctx, db, "SELECT count(*) as total, name FROM users GROUP BY name")
+func (r *Repo[T]) Raw(ctx context.Context, db *gorm.DB, sql string, args ...any) ([]T, error) {
+	var results []T
+	result := db.WithContext(ctx).Raw(sql, args...).Find(&results)
+	if err := handleQueryError(result, "raw"); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+// Exec executes a raw SQL statement (INSERT/UPDATE/DELETE/DDL).
+// Use this for batch updates, complex deletes, or direct SQL execution.
+//
+// Example:
+//
+//	err := dal.Exec(ctx, db, "UPDATE users SET status = ? WHERE status = ?", 0, 1)
+func Exec(ctx context.Context, db *gorm.DB, sql string, args ...any) error {
+	result := db.WithContext(ctx).Exec(sql, args...)
+	return handleExecError(result, "exec")
+}
+
+// handleExecError evaluates a GORM write operation and returns an error on failure.
+func handleExecError(result *gorm.DB, action string) error {
+	if result.Error != nil {
+		dbErr := fmt.Errorf("%w: %v", ErrDatabase, result.Error)
+		return fmt.Errorf("%s: %w", action, dbErr)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("%s: %w", action, ErrNoRowsAffected)
+	}
+	return nil
+}
+
+// handleQueryError evaluates a GORM query operation and returns an error on failure.
+func handleQueryError(result *gorm.DB, action string) error {
+	if result.Error != nil {
+		dbErr := fmt.Errorf("%w: %v", ErrDatabase, result.Error)
+		return fmt.Errorf("%s: %w", action, dbErr)
+	}
+	return nil
 }
