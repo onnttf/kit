@@ -71,15 +71,15 @@ func WithTimeout(d time.Duration) Option {
 	}
 }
 
-// Get downloads content from the URL to the given path.
+// GetFile downloads content from the URL to the given name.
 // The download is atomic: content is first written to a temporary file and then renamed.
 // The parent directory is created if it does not exist.
 // If ctx is nil, context.Background() is used.
 //
 // Example:
 //
-//	err := download.Get(context.Background(), "https://example.com/file.zip", "downloads/file.zip")
-func Get(ctx context.Context, rawURL, path string, opts ...Option) error {
+//	err := download.GetFile(context.Background(), "https://example.com/file.zip", "downloads/file.zip")
+func GetFile(ctx context.Context, rawURL, name string, opts ...Option) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -94,7 +94,7 @@ func Get(ctx context.Context, rawURL, path string, opts ...Option) error {
 	}
 
 	if !cfg.overwrite {
-		if _, err := os.Stat(path); err == nil {
+		if _, err := os.Stat(name); err == nil {
 			return ErrFileExists
 		}
 	}
@@ -115,12 +115,12 @@ func Get(ctx context.Context, rawURL, path string, opts ...Option) error {
 		return err
 	}
 
-	dir := filepath.Dir(path)
+	dir := filepath.Dir(name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create directory %q: %w", dir, err)
 	}
 
-	tmpFile, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	tmpFile, err := os.CreateTemp(dir, filepath.Base(name)+".*.tmp")
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)
 	}
@@ -136,29 +136,29 @@ func Get(ctx context.Context, rawURL, path string, opts ...Option) error {
 	}
 
 	if cfg.overwrite {
-		if err := os.Rename(tmpPath, path); err != nil {
-			_ = os.Remove(path)
-			if renameErr := os.Rename(tmpPath, path); renameErr != nil {
+		if err := os.Rename(tmpPath, name); err != nil {
+			_ = os.Remove(name)
+			if renameErr := os.Rename(tmpPath, name); renameErr != nil {
 				return fmt.Errorf("rename temp file after remove: %w", renameErr)
 			}
 		}
 		return nil
 	}
 
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := os.Rename(tmpPath, name); err != nil {
 		return fmt.Errorf("rename temp file: %w", err)
 	}
 
 	return nil
 }
 
-// Bytes downloads content from the URL and returns it as a byte slice.
+// GetBytes downloads content from the URL and returns it as a byte slice.
 // If ctx is nil, context.Background() is used.
 //
 // Example:
 //
-//	data, err := download.Bytes(context.Background(), "https://example.com/data.json")
-func Bytes(ctx context.Context, rawURL string, opts ...Option) ([]byte, error) {
+//	data, err := download.GetBytes(context.Background(), "https://example.com/data.json")
+func GetBytes(ctx context.Context, rawURL string, opts ...Option) ([]byte, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
