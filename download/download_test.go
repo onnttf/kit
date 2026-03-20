@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-func TestGet_Success(t *testing.T) {
+func TestGetFile_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("hello world"))
 	}))
@@ -22,9 +22,9 @@ func TestGet_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 	destPath := filepath.Join(tmpDir, "test.txt")
 
-	err := Get(context.Background(), server.URL, destPath)
+	err := GetFile(context.Background(), server.URL, destPath)
 	if err != nil {
-		t.Fatalf("Get() error = %v", err)
+		t.Fatalf("GetFile() error = %v", err)
 	}
 
 	data, err := os.ReadFile(destPath)
@@ -36,8 +36,8 @@ func TestGet_Success(t *testing.T) {
 	}
 }
 
-func TestGet_EmptyURL(t *testing.T) {
-	err := Get(context.Background(), "", "/tmp/test.txt")
+func TestGetFile_EmptyURL(t *testing.T) {
+	err := GetFile(context.Background(), "", "/tmp/test.txt")
 	if err == nil {
 		t.Error("expected error for empty URL")
 	}
@@ -46,8 +46,8 @@ func TestGet_EmptyURL(t *testing.T) {
 	}
 }
 
-func TestGet_InvalidURL(t *testing.T) {
-	err := Get(context.Background(), "ftp://example.com/file.txt", "/tmp/test.txt")
+func TestGetFile_InvalidURL(t *testing.T) {
+	err := GetFile(context.Background(), "ftp://example.com/file.txt", "/tmp/test.txt")
 	if err == nil {
 		t.Error("expected error for invalid URL")
 	}
@@ -56,14 +56,14 @@ func TestGet_InvalidURL(t *testing.T) {
 	}
 }
 
-func TestGet_InvalidURL2(t *testing.T) {
-	err := Get(context.Background(), "://example.com/file.txt", "/tmp/test.txt")
+func TestGetFile_InvalidURL2(t *testing.T) {
+	err := GetFile(context.Background(), "://example.com/file.txt", "/tmp/test.txt")
 	if err == nil {
 		t.Error("expected error for empty scheme")
 	}
 }
 
-func TestGet_FileAlreadyExists(t *testing.T) {
+func TestGetFile_FileAlreadyExists(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("content"))
 	}))
@@ -77,7 +77,7 @@ func TestGet_FileAlreadyExists(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	err := Get(context.Background(), server.URL, destPath)
+	err := GetFile(context.Background(), server.URL, destPath)
 	if err == nil {
 		t.Error("expected error when file exists")
 	}
@@ -86,7 +86,7 @@ func TestGet_FileAlreadyExists(t *testing.T) {
 	}
 }
 
-func TestGet_Overwrite(t *testing.T) {
+func TestGetFile_Overwrite(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("new content"))
 	}))
@@ -100,9 +100,9 @@ func TestGet_Overwrite(t *testing.T) {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	err := Get(context.Background(), server.URL, destPath, WithOverwrite())
+	err := GetFile(context.Background(), server.URL, destPath, WithOverwrite())
 	if err != nil {
-		t.Fatalf("Get() with overwrite error = %v", err)
+		t.Fatalf("GetFile() with overwrite error = %v", err)
 	}
 
 	data, err := os.ReadFile(destPath)
@@ -114,7 +114,7 @@ func TestGet_Overwrite(t *testing.T) {
 	}
 }
 
-func TestGet_CreateDirectory(t *testing.T) {
+func TestGetFile_CreateDirectory(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("content"))
 	}))
@@ -123,9 +123,9 @@ func TestGet_CreateDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	destPath := filepath.Join(tmpDir, "nested", "dir", "test.txt")
 
-	err := Get(context.Background(), server.URL, destPath)
+	err := GetFile(context.Background(), server.URL, destPath)
 	if err != nil {
-		t.Fatalf("Get() error = %v", err)
+		t.Fatalf("GetFile() error = %v", err)
 	}
 
 	data, err := os.ReadFile(destPath)
@@ -137,7 +137,7 @@ func TestGet_CreateDirectory(t *testing.T) {
 	}
 }
 
-func TestGet_Non200Status(t *testing.T) {
+func TestGetFile_Non200Status(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
@@ -146,13 +146,13 @@ func TestGet_Non200Status(t *testing.T) {
 	tmpDir := t.TempDir()
 	destPath := filepath.Join(tmpDir, "test.txt")
 
-	err := Get(context.Background(), server.URL, destPath)
+	err := GetFile(context.Background(), server.URL, destPath)
 	if err == nil {
 		t.Error("expected error for non-200 status")
 	}
 }
 
-func TestGet_ContentLengthExceedsMax(t *testing.T) {
+func TestGetFile_ContentLengthExceedsMax(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", "1000")
 		w.Write(make([]byte, 1000))
@@ -162,13 +162,13 @@ func TestGet_ContentLengthExceedsMax(t *testing.T) {
 	tmpDir := t.TempDir()
 	destPath := filepath.Join(tmpDir, "test.txt")
 
-	err := Get(context.Background(), server.URL, destPath, WithMaxBytes(500))
+	err := GetFile(context.Background(), server.URL, destPath, WithMaxBytes(500))
 	if err == nil {
 		t.Error("expected error when content length exceeds max")
 	}
 }
 
-func TestGet_WithCustomClient(t *testing.T) {
+func TestGetFile_WithCustomClient(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("custom client"))
 	}))
@@ -178,9 +178,9 @@ func TestGet_WithCustomClient(t *testing.T) {
 	destPath := filepath.Join(tmpDir, "test.txt")
 
 	client := &http.Client{}
-	err := Get(context.Background(), server.URL, destPath, WithClient(client))
+	err := GetFile(context.Background(), server.URL, destPath, WithClient(client))
 	if err != nil {
-		t.Fatalf("Get() error = %v", err)
+		t.Fatalf("GetFile() error = %v", err)
 	}
 
 	data, err := os.ReadFile(destPath)
@@ -192,7 +192,7 @@ func TestGet_WithCustomClient(t *testing.T) {
 	}
 }
 
-func TestGet_WithTimeout(t *testing.T) {
+func TestGetFile_WithTimeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("timeout test"))
 	}))
@@ -201,89 +201,89 @@ func TestGet_WithTimeout(t *testing.T) {
 	tmpDir := t.TempDir()
 	destPath := filepath.Join(tmpDir, "test.txt")
 
-	err := Get(context.Background(), server.URL, destPath, WithTimeout(5e9)) // 5 seconds
+	err := GetFile(context.Background(), server.URL, destPath, WithTimeout(5e9)) // 5 seconds
 	if err != nil {
-		t.Fatalf("Get() error = %v", err)
+		t.Fatalf("GetFile() error = %v", err)
 	}
 }
 
-func TestBytes_Success(t *testing.T) {
+func TestGetBytes_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("bytes content"))
 	}))
 	defer server.Close()
 
-	data, err := Bytes(context.Background(), server.URL)
+	data, err := GetBytes(context.Background(), server.URL)
 	if err != nil {
-		t.Fatalf("Bytes() error = %v", err)
+		t.Fatalf("GetBytes() error = %v", err)
 	}
 	if string(data) != "bytes content" {
 		t.Errorf("got %q, want %q", string(data), "bytes content")
 	}
 }
 
-func TestBytes_EmptyURL(t *testing.T) {
-	_, err := Bytes(context.Background(), "")
+func TestGetBytes_EmptyURL(t *testing.T) {
+	_, err := GetBytes(context.Background(), "")
 	if err == nil {
 		t.Error("expected error for empty URL")
 	}
 }
 
-func TestBytes_InvalidURL(t *testing.T) {
-	_, err := Bytes(context.Background(), "http://")
+func TestGetBytes_InvalidURL(t *testing.T) {
+	_, err := GetBytes(context.Background(), "http://")
 	if err == nil {
 		t.Error("expected error for invalid URL")
 	}
 }
 
-func TestBytes_Non200Status(t *testing.T) {
+func TestGetBytes_Non200Status(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 	}))
 	defer server.Close()
 
-	_, err := Bytes(context.Background(), server.URL)
+	_, err := GetBytes(context.Background(), server.URL)
 	if err == nil {
 		t.Error("expected error for non-200 status")
 	}
 }
 
-func TestBytes_ContentLengthExceedsMax(t *testing.T) {
+func TestGetBytes_ContentLengthExceedsMax(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", "2000")
 		w.Write(make([]byte, 2000))
 	}))
 	defer server.Close()
 
-	_, err := Bytes(context.Background(), server.URL, WithMaxBytes(1000))
+	_, err := GetBytes(context.Background(), server.URL, WithMaxBytes(1000))
 	if err == nil {
 		t.Error("expected error when content length exceeds max")
 	}
 }
 
-func TestBytes_ContentExceedsMax(t *testing.T) {
+func TestGetBytes_ContentExceedsMax(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// No Content-Length header, but body exceeds limit
 		w.Write(make([]byte, 2000))
 	}))
 	defer server.Close()
 
-	_, err := Bytes(context.Background(), server.URL, WithMaxBytes(1000))
+	_, err := GetBytes(context.Background(), server.URL, WithMaxBytes(1000))
 	if err == nil {
 		t.Error("expected error when content exceeds max bytes")
 	}
 }
 
-func TestBytes_WithClient(t *testing.T) {
+func TestGetBytes_WithClient(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("custom"))
 	}))
 	defer server.Close()
 
 	client := &http.Client{}
-	data, err := Bytes(context.Background(), server.URL, WithClient(client))
+	data, err := GetBytes(context.Background(), server.URL, WithClient(client))
 	if err != nil {
-		t.Fatalf("Bytes() error = %v", err)
+		t.Fatalf("GetBytes() error = %v", err)
 	}
 	if string(data) != "custom" {
 		t.Errorf("got %q, want %q", string(data), "custom")
@@ -510,7 +510,7 @@ func (r *limitTestReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-func BenchmarkGet(b *testing.B) {
+func BenchmarkGetFile(b *testing.B) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("benchmark data"))
 	}))
@@ -521,12 +521,12 @@ func BenchmarkGet(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		destPath := filepath.Join(tmpDir, "bench", "test.txt")
-		_ = Get(context.Background(), server.URL, destPath)
+		_ = GetFile(context.Background(), server.URL, destPath)
 		os.RemoveAll(filepath.Join(tmpDir, "bench"))
 	}
 }
 
-func BenchmarkBytes(b *testing.B) {
+func BenchmarkGetBytes(b *testing.B) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("benchmark data"))
 	}))
@@ -534,6 +534,6 @@ func BenchmarkBytes(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = Bytes(context.Background(), server.URL)
+		_, _ = GetBytes(context.Background(), server.URL)
 	}
 }
