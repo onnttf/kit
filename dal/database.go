@@ -55,7 +55,7 @@ func NewRepo[T any]() *Repo[T] {
 	return &Repo[T]{}
 }
 
-// Insert adds a new entity to the database, returning an error if the input is nil.
+// Insert inserts a new entity into the database.
 func (r *Repo[T]) Insert(ctx context.Context, db *gorm.DB, newValue *T) error {
 	if newValue == nil {
 		return errors.New("newValue is nil")
@@ -64,7 +64,7 @@ func (r *Repo[T]) Insert(ctx context.Context, db *gorm.DB, newValue *T) error {
 	return handleExecError(result, "insert")
 }
 
-// BatchInsert adds multiple entities to the database in batches, using a default batch size of 10 if unspecified.
+// BatchInsert inserts multiple entities into the database in batches.
 func (r *Repo[T]) BatchInsert(ctx context.Context, db *gorm.DB, newValues []*T, batchSize int) error {
 	if len(newValues) == 0 {
 		return errors.New("newValues is empty")
@@ -81,7 +81,7 @@ func (r *Repo[T]) BatchInsert(ctx context.Context, db *gorm.DB, newValues []*T, 
 	return handleExecError(result, "batch insert")
 }
 
-// Update modifies an existing entity in the database, applying the specified scopes for filtering.
+// Update updates an existing entity in the database.
 func (r *Repo[T]) Update(ctx context.Context, db *gorm.DB, newValue *T, scopes ...func(db *gorm.DB) *gorm.DB) error {
 	if newValue == nil {
 		return errors.New("newValue is nil")
@@ -90,7 +90,7 @@ func (r *Repo[T]) Update(ctx context.Context, db *gorm.DB, newValue *T, scopes .
 	return handleExecError(result, "update")
 }
 
-// UpdateFields modifies specific fields of entities in the database, applying the specified scopes.
+// UpdateFields updates specific fields of entities in the database.
 func (r *Repo[T]) UpdateFields(ctx context.Context, db *gorm.DB, newValue map[string]any, scopes ...func(db *gorm.DB) *gorm.DB) error {
 	if len(newValue) == 0 {
 		return errors.New("newValue is empty")
@@ -179,23 +179,23 @@ func Exec(ctx context.Context, db *gorm.DB, sql string, args ...any) error {
 	return handleExecError(result, "exec")
 }
 
-// handleExecError evaluates a GORM write operation and returns an error on failure.
-func handleExecError(result *gorm.DB, action string) error {
+// handleExecError handles a GORM write operation.
+func handleExecError(result *gorm.DB, op string) error {
 	if result.Error != nil {
 		dbErr := fmt.Errorf("%w: %v", ErrDatabase, result.Error)
-		return fmt.Errorf("%s: %w", action, dbErr)
+		return fmt.Errorf("%s: %w", op, dbErr)
 	}
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("%s: %w", action, ErrNoRowsAffected)
+		return fmt.Errorf("%s: %w", op, ErrNoRowsAffected)
 	}
 	return nil
 }
 
-// handleQueryError evaluates a GORM query operation and returns an error on failure.
-func handleQueryError(result *gorm.DB, action string) error {
+// handleQueryError handles a GORM query operation.
+func handleQueryError(result *gorm.DB, op string) error {
 	if result.Error != nil {
 		dbErr := fmt.Errorf("%w: %v", ErrDatabase, result.Error)
-		return fmt.Errorf("%s: %w", action, dbErr)
+		return fmt.Errorf("%s: %w", op, dbErr)
 	}
 	return nil
 }

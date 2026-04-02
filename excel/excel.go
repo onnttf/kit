@@ -83,7 +83,6 @@ func ReadSheet(path, sheet string) ([][]string, error) {
 
 // Walk reads the Excel file row by row and calls fn for each row.
 // It avoids loading the entire sheet into memory.
-// The index is the 0-based row number.
 //
 // Example:
 //
@@ -104,7 +103,7 @@ func Walk(path, sheet string, fn func(index int, row []string) error) error {
 	}
 	defer rows.Close()
 
-	index := 0
+	index := 1
 	for rows.Next() {
 		columns, err := rows.Columns()
 		if err != nil {
@@ -124,7 +123,6 @@ func Walk(path, sheet string, fn func(index int, row []string) error) error {
 // and calls fn for each row.
 //
 // Rows that fail to parse are skipped.
-// The index is the 0-based row number.
 //
 // Example:
 //
@@ -152,14 +150,14 @@ func Scan[T any](path, sheet string, fn func(index int, row *T) error) error {
 
 	info := getStructInfo[T]()
 
-	index := 0
+	index := 1
 	for rows.Next() {
 		columns, err := rows.Columns()
 		if err != nil {
 			return err
 		}
 
-		v, err := unmarshalRow(columns, info.typ, info.fields, 0)
+		v, err := unmarshalRow(columns, info.typ, info.fields, index)
 		if err != nil {
 			index++
 			continue
@@ -269,7 +267,7 @@ func columnIndex(col string) (int, error) {
 
 	for _, c := range col {
 		if c < 'A' || c > 'Z' {
-			return 0, fmt.Errorf("column name is invalid: %q", col)
+			return 0, fmt.Errorf("invalid column: %q", col)
 		}
 
 		n = n*26 + int(c-'A'+1)
@@ -311,7 +309,7 @@ func unmarshalRow(
 		}
 
 		if err := setField(v.Field(f.index), columns[colIndex]); err != nil {
-			return reflect.Value{}, fmt.Errorf("row %d column %s: %w", row, columnName(colIndex), err)
+			return reflect.Value{}, fmt.Errorf("row %d, column %s: %w", row, columnName(colIndex), err)
 		}
 	}
 

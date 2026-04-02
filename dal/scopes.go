@@ -6,6 +6,14 @@ import (
 	"gorm.io/gorm"
 )
 
+// escapeLike escapes LIKE wildcards (%, _, \) in s so they are matched literally.
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
 // Pagination constants.
 const (
 	DefaultPageSize = 10  // Default number of records per page.
@@ -76,14 +84,15 @@ func Limit(limit int) func(db *gorm.DB) *gorm.DB {
 }
 
 // Like returns a scope function that filters a query using a LIKE clause.
-// Wildcards are automatically added around the value.
+// Wildcards (%, _, \) in value are escaped so they are matched literally.
 // The column name is quoted to prevent SQL injection.
 //
 // Example:
 //
 //	db.Scopes(Like("name", "john")).Find(&users) // WHERE name LIKE '%john%'
 func Like(column, value string) func(db *gorm.DB) *gorm.DB {
+	escaped := escapeLike(value)
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(db.Statement.Quote(column)+" LIKE ?", "%"+value+"%")
+		return db.Where(db.Statement.Quote(column)+` LIKE ? ESCAPE '\'`, "%"+escaped+"%")
 	}
 }

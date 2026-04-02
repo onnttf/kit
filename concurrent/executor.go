@@ -283,10 +283,10 @@ func (e *Executor[T]) runWithRetry(
 
 			if e.config.Backoff != nil {
 				timer := time.NewTimer(e.config.Backoff(item.attempt))
+				defer timer.Stop()
 				select {
 				case <-timer.C:
 				case <-ctx.Done():
-					timer.Stop()
 					return
 				}
 			}
@@ -318,7 +318,7 @@ func (e *Executor[T]) execute(
 		defer func() {
 			taskCancel()
 			if errors.Is(err, context.DeadlineExceeded) {
-				err = fmt.Errorf("task timeout after %v: %w", e.config.Timeout, err)
+				err = fmt.Errorf("task timeout: %w, timeout=%v", err, e.config.Timeout)
 			}
 		}()
 	}

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -21,11 +22,16 @@ const (
 var ErrFileExists = errors.New("file already exists")
 
 var (
-	// defaultClient is the default HTTP client used for downloads.
-	defaultClient = &http.Client{
-		Timeout: 30 * time.Second,
-	}
+	defaultClientOnce sync.Once
+	defaultClient     *http.Client
 )
+
+func getDefaultClient() *http.Client {
+	defaultClientOnce.Do(func() {
+		defaultClient = &http.Client{Timeout: 30 * time.Second}
+	})
+	return defaultClient
+}
 
 // config holds the configuration for a download operation.
 type config struct {
@@ -65,13 +71,13 @@ func WithOverwrite() Option {
 // WithTimeout sets the HTTP client's timeout.
 func WithTimeout(d time.Duration) Option {
 	return func(c *config) {
-		cli := *c.client
-		cli.Timeout = d
-		c.client = &cli
+		client := *c.client
+		client.Timeout = d
+		c.client = &client
 	}
 }
 
-// GetFile downloads content from the URL to the given name.
+// GetFile downloads content from the URL to the given path.
 // The download is atomic: content is first written to a temporary file and then renamed.
 // The parent directory is created if it does not exist.
 // If ctx is nil, context.Background() is used.
@@ -90,7 +96,7 @@ func GetFile(ctx context.Context, rawURL, name string, opts ...Option) error {
 		return errors.New("url is empty")
 	}
 	if err := validateURL(rawURL); err != nil {
-		return fmt.Errorf("url validation failed: %w", err)
+		return fmt.Errorf("%w", err)
 	}
 
 	if !cfg.overwrite {
@@ -106,7 +112,7 @@ func GetFile(ctx context.Context, rawURL, name string, opts ...Option) error {
 
 	resp, err := cfg.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("send http request: %w", err)
+		return fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -117,7 +123,7 @@ func GetFile(ctx context.Context, rawURL, name string, opts ...Option) error {
 
 	dir := filepath.Dir(name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create directory %q: %w", dir, err)
+		return fmt.Errorf("create directory: %w", err)
 	}
 
 	tmpFile, err := os.CreateTemp(dir, filepath.Base(name)+".*.tmp")
@@ -137,9 +143,13 @@ func GetFile(ctx context.Context, rawURL, name string, opts ...Option) error {
 
 	if cfg.overwrite {
 		if err := os.Rename(tmpPath, name); err != nil {
-			_ = os.Remove(name)
+			// On Windows, Rename fails when the destination exists.
+			// Remove the existing file and retry.
+			if removeErr := os.Remove(name); removeErr != nil && !os.IsNotExist(removeErr) {
+				return fmt.Errorf("remove existing file: %w", removeErr)
+			}
 			if renameErr := os.Rename(tmpPath, name); renameErr != nil {
-				return fmt.Errorf("rename temp file after remove: %w", renameErr)
+				return fmt.Errorf("rename temp file: %w", renameErr)
 			}
 		}
 		return nil
@@ -169,7 +179,7 @@ func GetBytes(ctx context.Context, rawURL string, opts ...Option) ([]byte, error
 		return nil, errors.New("url is empty")
 	}
 	if err := validateURL(rawURL); err != nil {
-		return nil, fmt.Errorf("url validation failed: %w", err)
+		return nil, fmt.Errorf("%w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
@@ -179,7 +189,7 @@ func GetBytes(ctx context.Context, rawURL string, opts ...Option) ([]byte, error
 
 	resp, err := cfg.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("send http request: %w", err)
+		return nil, fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -197,9 +207,9 @@ func GetBytes(ctx context.Context, rawURL string, opts ...Option) ([]byte, error
 }
 
 func newConfig(opts ...Option) *config {
-	cli := *defaultClient
+	client := *getDefaultClient()
 	cfg := &config{
-		client:   &cli,
+		client:   &client,
 		maxBytes: defaultMaxBytes,
 	}
 
@@ -226,10 +236,10 @@ func validateURL(rawURL string) error {
 
 func checkResponse(resp *http.Response, maxBytes int64) error {
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected http status: code=%d", resp.StatusCode)
+		return fmt.Errorf("unexpected http status: status=%d", resp.StatusCode)
 	}
 	if resp.ContentLength > 0 && resp.ContentLength > maxBytes {
-		return fmt.Errorf("content too large: size=%d", resp.ContentLength)
+		return fmt.Errorf("content too large: length=%d", resp.ContentLength)
 	}
 	return nil
 }
@@ -241,7 +251,7 @@ func readLimited(r io.Reader, maxBytes int64) ([]byte, error) {
 		return nil, err
 	}
 	if int64(len(data)) > maxBytes {
-		return nil, fmt.Errorf("body too large: size=%d", maxBytes)
+		return nil, fmt.Errorf("body too large: maxBytes=%d", maxBytes)
 	}
 	return data, nil
 }
@@ -253,7 +263,7 @@ func copyLimited(dst io.Writer, src io.Reader, maxBytes int64) error {
 		return err
 	}
 	if n > maxBytes {
-		return fmt.Errorf("body too large: size=%d", maxBytes)
+		return fmt.Errorf("body too large: maxBytes=%d", maxBytes)
 	}
 	return nil
 }

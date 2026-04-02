@@ -731,10 +731,9 @@ func BenchmarkExecutor_Concurrency(b *testing.B) {
 			config := Config[int]{
 				Concurrency: cfg.concurrency,
 			}
-			executor, _ := New(config)
-
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
+				executor, _ := New(config)
 				executor.Run(context.Background(), items, handler)
 			}
 		})

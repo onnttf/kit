@@ -51,7 +51,7 @@ func TestGetFile_InvalidURL(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for invalid URL")
 	}
-	if err != nil && err.Error() != "url validation failed: invalid scheme: scheme=ftp" {
+	if err != nil && err.Error() != "invalid scheme: ftp" {
 		t.Errorf("got error %q", err)
 	}
 }
