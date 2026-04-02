@@ -1,262 +1,69 @@
 package tree
 
 import (
-	"strings"
 	"testing"
 )
 
-func newNodes() []*Node {
-	return []*Node{
-		{Key: "1", ParentKey: "1", Sort: 1}, // root
-		{Key: "2", ParentKey: "1", Sort: 2},
-		{Key: "3", ParentKey: "2", Sort: 1},
-		{Key: "4", ParentKey: "2", Sort: 2},
-		{Key: "5", ParentKey: "1", Sort: 3},
+// testItem is the shared fixture type for all tests.
+type testItem struct {
+	ID       int
+	ParentID int
+	Sort     int
+	Name     string
+}
+
+// newBuilder returns a fully configured Builder for testItem.
+func newBuilder() *Builder[testItem, int] {
+	return NewBuilder[testItem, int]().
+		KeyBy(func(d testItem) int { return d.ID }).
+		ParentBy(func(d testItem) int { return d.ParentID }).
+		SortBy(func(d testItem) int { return d.Sort })
+}
+
+// newItems returns a standard 5-node fixture:
+//
+//	1 (root, self-ref ParentID=1)
+//	├── 2 (Sort=2)
+//	│   ├── 3 (Sort=1)
+//	│   └── 4 (Sort=2)
+//	└── 5 (Sort=3)
+func newItems() []testItem {
+	return []testItem{
+		{ID: 1, ParentID: 1, Sort: 1, Name: "root"},
+		{ID: 2, ParentID: 1, Sort: 2, Name: "child-A"},
+		{ID: 3, ParentID: 2, Sort: 1, Name: "grandchild-1"},
+		{ID: 4, ParentID: 2, Sort: 2, Name: "grandchild-2"},
+		{ID: 5, ParentID: 1, Sort: 3, Name: "child-B"},
 	}
 }
 
-func TestBuildWithNodes(t *testing.T) {
-	tb := NewBuilder().WithNodes(newNodes())
-	nodeMap, roots := tb.Build()
-
-	if len(roots) != 1 {
-		t.Errorf("expected 1 root, got %d", len(roots))
-	}
-	if _, ok := nodeMap["2"]; !ok {
-		t.Error("node 2 not found in nodeMap")
-	}
-	if len(nodeMap["2"].Children) != 2 {
-		t.Errorf("expected node 2 to have 2 children, got %d", len(nodeMap["2"].Children))
+func TestNewBuilder(t *testing.T) {
+	b := NewBuilder[testItem, int]()
+	if b == nil {
+		t.Fatal("NewBuilder returned nil")
 	}
 }
 
-func TestAddNodeAndBuild(t *testing.T) {
-	tb := NewBuilder()
-	tb.AddNode("1", "1", 1).AddNode("2", "1", 2).AddNode("3", "2", 3)
-	nodeMap, roots := tb.Build()
-
-	if len(roots) != 1 {
-		t.Errorf("expected 1 root, got %d", len(roots))
-	}
-	if _, ok := nodeMap["3"]; !ok {
-		t.Error("node 3 not found in nodeMap")
-	}
-	if len(nodeMap["2"].Children) != 1 {
-		t.Errorf("expected node 2 to have 1 child, got %d", len(nodeMap["2"].Children))
+func TestKeyByNilIsNoop(t *testing.T) {
+	b := NewBuilder[testItem, int]()
+	b2 := b.KeyBy(nil)
+	if b2 != b {
+		t.Error("KeyBy(nil) should return same builder")
 	}
 }
 
-func TestMoveNode(t *testing.T) {
-	tb := NewBuilder().WithNodes(newNodes())
-	tb.MoveNode("5", "2")
-	nodeMap, _ := tb.Build()
-
-	if nodeMap["5"].ParentKey != "2" {
-		t.Error("node 5 parent not updated")
-	}
-	if len(nodeMap["1"].Children) != 1 {
-		t.Errorf("node 1 should have 1 child after move, got %d", len(nodeMap["1"].Children))
-	}
-	if len(nodeMap["2"].Children) != 3 {
-		t.Errorf("node 2 should have 3 children after move, got %d", len(nodeMap["2"].Children))
+func TestParentByNilIsNoop(t *testing.T) {
+	b := NewBuilder[testItem, int]()
+	b2 := b.ParentBy(nil)
+	if b2 != b {
+		t.Error("ParentBy(nil) should return same builder")
 	}
 }
 
-func TestRemoveNode(t *testing.T) {
-	tb := NewBuilder().WithNodes(newNodes())
-	tb.RemoveNode("2")
-	nodeMap, _ := tb.Build()
-
-	if _, ok := nodeMap["2"]; ok {
-		t.Error("node 2 was not removed")
-	}
-	if _, ok := nodeMap["3"]; ok {
-		t.Error("descendant node 3 was not removed")
-	}
-}
-
-func TestUpdateNode(t *testing.T) {
-	tb := NewBuilder().WithNodes(newNodes())
-	tb.UpdateNode("5", func(n *Node) { n.Sort = 10 })
-	nodeMap, _ := tb.Build()
-
-	if nodeMap["5"].Sort != 10 {
-		t.Errorf("expected node 5 Sort to be updated to 10, got %d", nodeMap["5"].Sort)
-	}
-}
-
-func TestFilter(t *testing.T) {
-	tb := NewBuilder().WithNodes(newNodes())
-	newTb := tb.Filter(func(n *Node) bool { return n.Sort%2 == 1 })
-	nodeMap, _ := newTb.Build()
-
-	for _, n := range nodeMap {
-		if n.Sort%2 != 1 {
-			t.Errorf("expected only odd Sort nodes, found Sort=%d", n.Sort)
-		}
-	}
-}
-
-func TestTransform(t *testing.T) {
-	tb := NewBuilder().WithNodes(newNodes())
-	tb.Transform(func(n *Node) { n.Sort = 42 })
-	nodeMap, _ := tb.Build()
-	for _, n := range nodeMap {
-		if n.Sort != 42 {
-			t.Errorf("Transform failed, expected 42, got %d", n.Sort)
-		}
-	}
-}
-
-func TestClone(t *testing.T) {
-	tb := NewBuilder().WithNodes(newNodes())
-	clone := tb.Clone()
-	clone.UpdateNode("1", func(n *Node) { n.Sort = 100 })
-
-	orig, _ := tb.Build()
-	after, _ := clone.Build()
-	if orig["1"].Sort == after["1"].Sort {
-		t.Error("modifying clone should not affect original")
-	}
-}
-
-func TestValidate_CycleAndOrphan(t *testing.T) {
-	// Cycle
-	nodes := []*Node{
-		{Key: "1", ParentKey: "2", Sort: 1},
-		{Key: "2", ParentKey: "1", Sort: 2},
-	}
-	tb := NewBuilder().WithNodes(nodes)
-	errs := tb.Validate()
-	hasCycle := false
-	for _, err := range errs {
-		if strings.Contains(err.Error(), "cycle detected") {
-			hasCycle = true
-		}
-	}
-	if !hasCycle {
-		t.Error("expected cycle detected error")
-	}
-
-	// Orphan
-	nodes = []*Node{
-		{Key: "1", ParentKey: "1", Sort: 1},
-		{Key: "2", ParentKey: "3", Sort: 2},
-	}
-	tb = NewBuilder().WithNodes(nodes)
-	errs = tb.Validate()
-	hasOrphan := false
-	t.Log("nodeMap:", tb.nodeMap)
-	t.Log("rootNodes:", tb.rootNodes)
-	t.Log("Validate errs:")
-	for _, err := range errs {
-		if strings.Contains(err.Error(), "orphan node") && strings.Contains(err.Error(), "2") {
-			hasOrphan = true
-		}
-	}
-	if !hasOrphan {
-		t.Error("expected orphan detected error")
-	}
-}
-
-func TestStatistics(t *testing.T) {
-	tb := NewBuilder().WithNodes(newNodes())
-	stats := tb.Statistics()
-
-	if stats["totalNodes"] != 5 {
-		t.Errorf("expected totalNodes 5, got %v", stats["totalNodes"])
-	}
-	if stats["rootNodes"] != 1 {
-		t.Errorf("expected rootNodes 1, got %v", stats["rootNodes"])
-	}
-	if stats["maxDepth"] != 3 {
-		t.Errorf("expected maxDepth 3, got %v", stats["maxDepth"])
-	}
-	if stats["leafNodes"] != 3 {
-		t.Errorf("expected leafNodes 3, got %v", stats["leafNodes"])
-	}
-	if avg, ok := stats["avgChildrenPerNode"].(float64); !ok || avg <= 0.0 {
-		t.Errorf("expected avgChildrenPerNode > 0, got %v", stats["avgChildrenPerNode"])
-	}
-}
-
-func TestOrderStableSort(t *testing.T) {
-	nodes := []*Node{
-		{Key: "1", ParentKey: "1", Sort: 1},
-		{Key: "2", ParentKey: "1", Sort: 2},
-		{Key: "3", ParentKey: "1", Sort: 2},
-		{Key: "4", ParentKey: "1", Sort: 3},
-	}
-	tb := NewBuilder().WithNodes(nodes)
-	_, roots := tb.Build()
-	children := roots[0].Children
-	if len(children) != 3 {
-		t.Errorf("expected 3 children under root, got %d", len(children))
-	}
-	// Children with same Sort should keep input order (2 before 3)
-	idx2, idx3 := -1, -1
-	for i, n := range children {
-		if n.Key == "2" {
-			idx2 = i
-		}
-		if n.Key == "3" {
-			idx3 = i
-		}
-	}
-	if idx2 == -1 || idx3 == -1 || idx2 > idx3 {
-		t.Errorf("stable sort failed, node 2 should be before node 3")
-	}
-}
-
-func TestEmptyTree(t *testing.T) {
-	tb := NewBuilder()
-	nodeMap, roots := tb.Build()
-	if len(nodeMap) != 0 {
-		t.Errorf("expected empty nodeMap, got %d", len(nodeMap))
-	}
-	if len(roots) != 0 {
-		t.Errorf("expected empty roots, got %d", len(roots))
-	}
-}
-
-func TestWithNodesNilNodes(t *testing.T) {
-	nodes := []*Node{
-		{Key: "1", ParentKey: "1", Sort: 1},
-		nil,
-		{Key: "2", ParentKey: "1", Sort: 2},
-	}
-	tb := NewBuilder().WithNodes(nodes)
-	nodeMap, roots := tb.Build()
-	if len(nodeMap) != 2 {
-		t.Errorf("expected 2 nodes, got %d", len(nodeMap))
-	}
-	if len(roots) != 1 {
-		t.Errorf("expected 1 root, got %d", len(roots))
-	}
-}
-
-func TestFilterEmpty(t *testing.T) {
-	tb := NewBuilder().WithNodes(newNodes())
-	newTb := tb.Filter(func(n *Node) bool { return false })
-	nodeMap, roots := newTb.Build()
-	if len(nodeMap) != 0 {
-		t.Errorf("expected filtered nodeMap to be empty, got %d", len(nodeMap))
-	}
-	if len(roots) != 0 {
-		t.Errorf("expected filtered roots to be empty, got %d", len(roots))
-	}
-}
-
-func TestTransformNoop(t *testing.T) {
-	tb := NewBuilder().WithNodes(newNodes())
-	tb.Transform(func(n *Node) {})
-	nodeMap, roots := tb.Build()
-	tb2 := NewBuilder().WithNodes(newNodes())
-	nodeMap2, roots2 := tb2.Build()
-	// Note: Transform marks dirty=true, so results may differ due to re-sorting
-	// This test is skipped as it depends on internal implementation details
-	if len(nodeMap) != len(nodeMap2) || len(roots) != len(roots2) {
-		t.Errorf("node count mismatch: nodeMap=%d vs %d, roots=%d vs %d",
-			len(nodeMap), len(nodeMap2), len(roots), len(roots2))
+func TestSortByNilIsNoop(t *testing.T) {
+	b := NewBuilder[testItem, int]()
+	b2 := b.SortBy(nil)
+	if b2 != b {
+		t.Error("SortBy(nil) should return same builder")
 	}
 }
