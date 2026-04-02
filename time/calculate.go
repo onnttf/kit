@@ -1,7 +1,14 @@
 package time
 
 import (
+	"fmt"
+	"sync"
 	"time"
+)
+
+var (
+	beijingLocOnce sync.Once
+	beijingLoc     *time.Location
 )
 
 // ParseInLocation parses a time string in the specified location.
@@ -20,11 +27,13 @@ func ParseInLocation(layout, value string, location *time.Location) (time.Time, 
 //
 //	ParseInBeijing("2006-01-02 15:04", "2024-03-15 14:30")
 func ParseInBeijing(layout, value string) (time.Time, error) {
-	location, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		return time.Time{}, err
+	beijingLocOnce.Do(func() {
+		beijingLoc, _ = time.LoadLocation("Asia/Shanghai")
+	})
+	if beijingLoc == nil {
+		return time.Time{}, fmt.Errorf("failed to load Asia/Shanghai timezone")
 	}
-	return time.ParseInLocation(layout, value, location)
+	return time.ParseInLocation(layout, value, beijingLoc)
 }
 
 // StartOfDay returns the start of day (00:00:00) for t.
@@ -36,13 +45,13 @@ func StartOfDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
 
-// EndOfDay returns the end of day (23:59:59) for t.
+// EndOfDay returns the end of day (23:59:59.999999999) for t.
 //
 // Example:
 //
 //	EndOfDay(time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC))
 func EndOfDay(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 0, t.Location())
+	return time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
 }
 
 // StartOfWeek returns the start of the week (Monday) for t.
@@ -86,7 +95,7 @@ func StartOfMonth(t time.Time) time.Time {
 //
 //	EndOfMonth(time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC))
 func EndOfMonth(t time.Time) time.Time {
-	return EndOfDay(t.AddDate(0, 1, -1))
+	return EndOfDay(StartOfMonth(t).AddDate(0, 1, -1))
 }
 
 // StartOfYear returns the start of the year for t.

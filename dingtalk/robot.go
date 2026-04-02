@@ -12,8 +12,19 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 )
+
+var defaultClientOnce sync.Once
+var defaultClient *http.Client
+
+func getDefaultClient() *http.Client {
+	defaultClientOnce.Do(func() {
+		defaultClient = &http.Client{Timeout: 5 * time.Second}
+	})
+	return defaultClient
+}
 
 // Robot is the client for sending messages to DingTalk.
 type Robot struct {
@@ -28,8 +39,7 @@ type Robot struct {
 //
 //	robot := dingtalk.NewRobot("your-access-token")
 func NewRobot(accessToken string) *Robot {
-	defaultClient := &http.Client{Timeout: 5 * time.Second}
-	return &Robot{accessToken: accessToken, httpClient: defaultClient}
+	return &Robot{accessToken: accessToken, httpClient: getDefaultClient()}
 }
 
 // WithSecret sets the secret for signature verification.
@@ -66,7 +76,7 @@ func (r *Robot) Send(msg Message) error {
 	return r.SendWithContext(ctx, msg)
 }
 
-// SendWithContext posts the message payload to DingTalk with context support for timeout and cancellation.
+// SendWithContext posts the message payload to DingTalk.
 // The context controls the entire HTTP request lifecycle.
 //
 // Example:
@@ -105,13 +115,13 @@ func (r *Robot) SendWithContext(ctx context.Context, msg Message) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewBuffer(payload))
 	if err != nil {
-		return fmt.Errorf("create http request: %w", err)
+		return fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json;charset=utf-8")
 
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("send http request: %w", err)
+		return fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -120,7 +130,7 @@ func (r *Robot) SendWithContext(ctx context.Context, msg Message) error {
 		return fmt.Errorf("read response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected http status: code=%d, body=%s", resp.StatusCode, string(body))
+		return fmt.Errorf("unexpected http status: status=%d, body=%s", resp.StatusCode, string(body))
 	}
 
 	var dingResp struct {
@@ -138,9 +148,6 @@ func (r *Robot) SendWithContext(ctx context.Context, msg Message) error {
 
 // calculateSign generates the DingTalk message signature.
 func (r *Robot) calculateSign(timestamp int64) (string, error) {
-	if r.secret == "" {
-		return "", errors.New("secret is empty")
-	}
 	stringToSign := fmt.Sprintf("%d\n%s", timestamp, r.secret)
 	h := hmac.New(sha256.New, []byte(r.secret))
 	h.Write([]byte(stringToSign))
