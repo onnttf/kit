@@ -126,7 +126,7 @@ func TestPaginate_OffsetCalculation(t *testing.T) {
 
 // Test Suite for Condition Function
 
-func TestCondition_ValidInput(t *testing.T) {
+func TestEqual_ValidInput(t *testing.T) {
 	tests := []struct {
 		name   string
 		column string
@@ -156,7 +156,7 @@ func TestCondition_ValidInput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			scope := Condition(tt.column, tt.value)
+			scope := Equal(tt.column, tt.value)
 			if scope == nil {
 				t.Error("Expected non-nil scope function")
 			}
@@ -164,7 +164,7 @@ func TestCondition_ValidInput(t *testing.T) {
 	}
 }
 
-func TestCondition_SpecialCharactersInColumn(t *testing.T) {
+func TestEqual_SpecialCharactersInColumn(t *testing.T) {
 	// Test that special characters are properly handled
 	columns := []string{
 		"user_id",
@@ -174,7 +174,7 @@ func TestCondition_SpecialCharactersInColumn(t *testing.T) {
 
 	for _, column := range columns {
 		t.Run(column, func(t *testing.T) {
-			scope := Condition(column, 123)
+			scope := Equal(column, 123)
 			if scope == nil {
 				t.Error("Expected non-nil scope function")
 			}
@@ -346,7 +346,7 @@ func TestScopeComposition(t *testing.T) {
 		// This would require a real DB connection to test properly
 		// Just verify the scopes can be created
 		_ = Paginate(2, 20)
-		_ = Condition("active", true)
+		_ = Equal("active", true)
 		_ = OrderBy("created_at", "desc")
 	})
 

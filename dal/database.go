@@ -104,7 +104,7 @@ func (r *Repo[T]) UpdateFields(ctx context.Context, db *gorm.DB, newValue map[st
 //
 // Example:
 //
-//	user, err := repo.QueryOne(ctx, db, Condition("id", 123))
+//	user, err := repo.QueryOne(ctx, db, Equal("id", 123))
 //	if errors.Is(err, dal.ErrNotFound) {
 //	    // handle not found case
 //	}
