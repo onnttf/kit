@@ -8,6 +8,13 @@ import (
 	"sync"
 )
 
+var (
+	ErrDuplicateKey = errors.New("duplicate key")
+	ErrKeyNotSet    = errors.New("key function not set")
+	ErrOrphanedNode = errors.New("orphaned node")
+	ErrCycle        = errors.New("cycle detected")
+)
+
 // Node is the output tree node. It holds the caller's item and its children.
 // Build constructs Nodes; callers should not modify them.
 //
@@ -16,73 +23,75 @@ import (
 //	roots, _ := b.Build()
 //	fmt.Println(roots[0].Item.Name)
 //	for _, child := range roots[0].Children { ... }
-type Node[T any, K comparable] struct {
+type Node[T any] struct {
 	Item     T
-	Children []*Node[T, K]
+	Children []*Node[T]
 }
 
 // node is the internal storage unit for a Builder entry. Not exported.
-type node[T any, K comparable] struct {
+type node[T any] struct {
 	item        T
-	key         K
-	parentKey   K
-	hasParent   bool // false when this is a root (ParentBy unset, or parentKey == key)
+	key         any
+	parentKey   any
+	hasParent   bool
 	sortVal     int
-	insertOrder int // position assigned at insertion; used for stable ordering when SortBy is nil
+	insertOrder int
 }
 
-// Builder builds a typed tree structure from arbitrary items using injected key
-// extraction functions. It is safe for concurrent use.
+// Builder builds a typed tree structure from arbitrary items. It is safe for
+// concurrent use. Keys are provided by the caller via KeyBy.
 //
 // Example:
 //
-//	roots, nodeMap := tree.NewBuilder[Dept, int]().
+//	roots, nodeMap := tree.NewBuilder[Dept]().
 //	    KeyBy(func(d Dept) int { return d.ID }).
 //	    ParentBy(func(d Dept) int { return d.ParentID }).
 //	    SortBy(func(d Dept) int { return d.Sort }).
 //	    WithItems(depts).
 //	    Build()
-type Builder[T any, K comparable] struct {
+type Builder[T any] struct {
 	mu    sync.RWMutex
-	items []*node[T, K]     // insertion-ordered; primary data source
-	index map[K]*node[T, K] // fast lookup by key
+	items []*node[T]
+	index map[any]*node[T]
 
 	insertCtr int
 
-	keyFn    func(T) K
-	parentFn func(T) K
+	keyFn    func(T) any
+	parentFn func(T) any
 	sortFn   func(T) int
 
-	// parentOverrides stores parent key overrides written by MoveItem.
-	// MoveItem cannot mutate T directly, so overrides are tracked here.
-	parentOverrides map[K]K
+	parentOverrides map[any]any
 
 	dirty     bool
-	roots     []*Node[T, K]     // cached by buildTree
-	nodeCache map[K]*Node[T, K] // cached by buildTree
+	roots     []*Node[T]
+	nodeCache map[any]*Node[T]
 }
 
 // NewBuilder returns a new Builder ready for configuration.
 //
 // Example:
 //
-//	b := tree.NewBuilder[Dept, int]()
-func NewBuilder[T any, K comparable]() *Builder[T, K] {
-	return &Builder[T, K]{
-		items: make([]*node[T, K], 0),
-		index: make(map[K]*node[T, K]),
+//	b := tree.NewBuilder[Dept]()
+func NewBuilder[T any]() *Builder[T] {
+	return &Builder[T]{
+		items: make([]*node[T], 0),
+		index: make(map[any]*node[T]),
 		dirty: true,
 	}
 }
 
 // KeyBy sets the function used to extract the unique key from each item.
-// Passing nil is a no-op.
+// Passing nil clears the key function.
 //
 // Example:
 //
 //	b.KeyBy(func(d Dept) int { return d.ID })
-func (b *Builder[T, K]) KeyBy(fn func(T) K) *Builder[T, K] {
+func (b *Builder[T]) KeyBy(fn func(T) any) *Builder[T] {
 	if fn == nil {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		b.keyFn = nil
+		b.dirty = true
 		return b
 	}
 	b.mu.Lock()
@@ -93,13 +102,18 @@ func (b *Builder[T, K]) KeyBy(fn func(T) K) *Builder[T, K] {
 }
 
 // ParentBy sets the function used to extract the parent key from each item.
-// When not set, all items are treated as root nodes. Passing nil is a no-op.
+// When not set, all items are treated as root nodes. Passing nil clears the
+// parent function.
 //
 // Example:
 //
 //	b.ParentBy(func(d Dept) int { return d.ParentID })
-func (b *Builder[T, K]) ParentBy(fn func(T) K) *Builder[T, K] {
+func (b *Builder[T]) ParentBy(fn func(T) any) *Builder[T] {
 	if fn == nil {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		b.parentFn = nil
+		b.dirty = true
 		return b
 	}
 	b.mu.Lock()
@@ -110,13 +124,18 @@ func (b *Builder[T, K]) ParentBy(fn func(T) K) *Builder[T, K] {
 }
 
 // SortBy sets the function used to determine sibling sort order.
-// When not set, siblings retain their insertion order. Passing nil is a no-op.
+// When not set, siblings retain their insertion order. Passing nil clears the
+// sort function.
 //
 // Example:
 //
 //	b.SortBy(func(d Dept) int { return d.Sort })
-func (b *Builder[T, K]) SortBy(fn func(T) int) *Builder[T, K] {
+func (b *Builder[T]) SortBy(fn func(T) int) *Builder[T] {
 	if fn == nil {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		b.sortFn = nil
+		b.dirty = true
 		return b
 	}
 	b.mu.Lock()
@@ -127,30 +146,35 @@ func (b *Builder[T, K]) SortBy(fn func(T) int) *Builder[T, K] {
 }
 
 // ensureBuiltLocked rebuilds the tree if dirty. Caller must hold mu.
-func (b *Builder[T, K]) ensureBuiltLocked() {
+func (b *Builder[T]) ensureBuiltLocked() error {
 	if b.dirty {
-		b.buildTree()
+		if err := b.buildTree(); err != nil {
+			return err
+		}
 		b.dirty = false
 	}
+	return nil
 }
 
 // buildTree recomputes node metadata, constructs output Nodes,
 // links parent-child relationships, and sorts siblings.
+// Returns error on duplicate key.
 // Caller must hold mu (write lock).
-func (b *Builder[T, K]) buildTree() {
-	// Phase 1: recompute metadata and rebuild index
-	b.index = make(map[K]*node[T, K], len(b.items))
+func (b *Builder[T]) buildTree() error {
+	b.index = make(map[any]*node[T], len(b.items))
 	for _, n := range b.items {
 		if b.keyFn != nil {
 			n.key = b.keyFn(n.item)
+			if _, exists := b.index[n.key]; exists {
+				return ErrDuplicateKey
+			}
 			b.index[n.key] = n
 		}
 		if b.parentFn != nil && b.keyFn != nil {
 			n.parentKey = b.parentFn(n.item)
 			n.hasParent = n.parentKey != n.key
 		} else {
-			var zero K
-			n.parentKey = zero
+			n.parentKey = nil
 			n.hasParent = false
 		}
 		if b.sortFn != nil {
@@ -161,10 +185,10 @@ func (b *Builder[T, K]) buildTree() {
 	}
 
 	// Phase 2: construct output Node wrappers
-	b.nodeCache = make(map[K]*Node[T, K], len(b.items))
+	b.nodeCache = make(map[any]*Node[T], len(b.items))
 	for _, n := range b.items {
 		if b.keyFn != nil {
-			b.nodeCache[n.key] = &Node[T, K]{Item: n.item}
+			b.nodeCache[n.key] = &Node[T]{Item: n.item}
 		}
 	}
 
@@ -182,11 +206,9 @@ func (b *Builder[T, K]) buildTree() {
 		} else if parent, ok := b.nodeCache[effectiveParent]; ok {
 			parent.Children = append(parent.Children, outNode)
 		}
-		// else: orphan — not reachable from any root
 	}
 
 	// Phase 4: sort siblings when SortBy is set.
-	// When SortBy is nil, insertion order is preserved naturally.
 	if b.sortFn != nil {
 		b.sortNodes(b.roots)
 	}
@@ -195,7 +217,7 @@ func (b *Builder[T, K]) buildTree() {
 // effectiveParent returns the effective parent key for n, accounting for
 // parentOverrides. Reports isRoot=true when the node should be a root.
 // Caller must hold mu.
-func (b *Builder[T, K]) effectiveParent(n *node[T, K]) (key K, isRoot bool) {
+func (b *Builder[T]) effectiveParent(n *node[T]) (key any, isRoot bool) {
 	if b.parentOverrides != nil {
 		if pk, ok := b.parentOverrides[n.key]; ok {
 			return pk, false
@@ -204,17 +226,16 @@ func (b *Builder[T, K]) effectiveParent(n *node[T, K]) (key K, isRoot bool) {
 	if n.hasParent {
 		return n.parentKey, false
 	}
-	var zero K
-	return zero, true
+	return nil, true
 }
 
 // sortNodes sorts nodes and their descendants by sortVal using a stable sort.
 // Uses an iterative post-order traversal to avoid stack overflow on deep trees.
 // Caller must hold mu.
-func (b *Builder[T, K]) sortNodes(roots []*Node[T, K]) {
-	// Collect all node slices that need sorting via iterative DFS.
-	type frame struct{ children []*Node[T, K] }
-	stack := []frame{{roots}}
+func (b *Builder[T]) sortNodes(roots []*Node[T]) {
+	type frame struct{ children []*Node[T] }
+	stack := make([]frame, 0, len(roots)*4)
+	stack = append(stack, frame{roots})
 	for len(stack) > 0 {
 		top := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
@@ -236,12 +257,12 @@ func (b *Builder[T, K]) sortNodes(roots []*Node[T, K]) {
 
 // maxDepth returns the maximum depth of the tree using iterative DFS.
 // Caller must hold mu and have called ensureBuiltLocked.
-func (b *Builder[T, K]) maxDepth() int {
+func (b *Builder[T]) maxDepth() int {
 	if len(b.roots) == 0 {
 		return 0
 	}
 	type entry struct {
-		n     *Node[T, K]
+		n     *Node[T]
 		depth int
 	}
 	stack := make([]entry, 0, len(b.roots))
@@ -264,7 +285,7 @@ func (b *Builder[T, K]) maxDepth() int {
 
 // leafCount returns the number of nodes with no children.
 // Caller must hold mu and have called ensureBuiltLocked.
-func (b *Builder[T, K]) leafCount() int {
+func (b *Builder[T]) leafCount() int {
 	count := 0
 	for _, n := range b.nodeCache {
 		if len(n.Children) == 0 {
@@ -278,17 +299,17 @@ func (b *Builder[T, K]) leafCount() int {
 // including the case where potentialDesc == ancestorKey (a node is considered
 // a descendant of itself, which prevents self-moves in MoveItem).
 // Caller must hold mu.
-func (b *Builder[T, K]) isDescendant(ancestorKey, potentialDesc K) bool {
+func (b *Builder[T]) isDescendant(ancestorKey, potentialDesc any) bool {
 	if ancestorKey == potentialDesc {
 		return true
 	}
-	visited := make(map[K]bool)
+	visited := make(map[any]struct{})
 	cur := potentialDesc
 	for {
-		if visited[cur] {
+		if _, ok := visited[cur]; ok {
 			return false
 		}
-		visited[cur] = true
+		visited[cur] = struct{}{}
 
 		n := b.index[cur]
 		if n == nil {
@@ -311,24 +332,24 @@ func (b *Builder[T, K]) isDescendant(ancestorKey, potentialDesc K) bool {
 // Example:
 //
 //	b.WithItems(depts)
-func (b *Builder[T, K]) WithItems(items []T) *Builder[T, K] {
+func (b *Builder[T]) WithItems(items []T) *Builder[T] {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	b.items = make([]*node[T, K], 0, len(items))
-	b.index = make(map[K]*node[T, K], len(items))
+	b.items = make([]*node[T], 0, len(items))
+	b.index = make(map[any]*node[T], len(items))
 	b.parentOverrides = nil
 	b.insertCtr = 0
 	b.dirty = true
 
 	for _, item := range items {
-		n := &node[T, K]{item: item, insertOrder: b.insertCtr}
+		n := &node[T]{item: item, insertOrder: b.insertCtr}
 		b.insertCtr++
-		b.items = append(b.items, n)
 		if b.keyFn != nil {
 			n.key = b.keyFn(item)
 			b.index[n.key] = n
 		}
+		b.items = append(b.items, n)
 	}
 	return b
 }
@@ -338,17 +359,17 @@ func (b *Builder[T, K]) WithItems(items []T) *Builder[T, K] {
 // Example:
 //
 //	b.AddItem(Dept{ID: 3, ParentID: 1, Name: "HR"})
-func (b *Builder[T, K]) AddItem(item T) *Builder[T, K] {
+func (b *Builder[T]) AddItem(item T) *Builder[T] {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	n := &node[T, K]{item: item, insertOrder: b.insertCtr}
+	n := &node[T]{item: item, insertOrder: b.insertCtr}
 	b.insertCtr++
-	b.items = append(b.items, n)
 	if b.keyFn != nil {
 		n.key = b.keyFn(item)
 		b.index[n.key] = n
 	}
+	b.items = append(b.items, n)
 	b.dirty = true
 	return b
 }
@@ -359,20 +380,25 @@ func (b *Builder[T, K]) AddItem(item T) *Builder[T, K] {
 // Example:
 //
 //	b.RemoveItem(2) // removes node 2 and all its children
-func (b *Builder[T, K]) RemoveItem(key K) *Builder[T, K] {
+func (b *Builder[T]) RemoveItem(key any) *Builder[T] {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	b.ensureBuiltLocked()
+	if b.keyFn == nil {
+		return b
+	}
+
+	if err := b.ensureBuiltLocked(); err != nil {
+		return b
+	}
 
 	cached, ok := b.nodeCache[key]
 	if !ok {
 		return b
 	}
 
-	// Collect the key and all descendant keys via iterative DFS.
-	toRemove := make(map[K]bool)
-	stack := []*Node[T, K]{cached}
+	toRemove := make(map[any]bool)
+	stack := []*Node[T]{cached}
 	for len(stack) > 0 {
 		cur := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
@@ -381,7 +407,6 @@ func (b *Builder[T, K]) RemoveItem(key K) *Builder[T, K] {
 		stack = append(stack, cur.Children...)
 	}
 
-	// Remove from index and overrides.
 	for k := range toRemove {
 		delete(b.index, k)
 		if b.parentOverrides != nil {
@@ -389,7 +414,6 @@ func (b *Builder[T, K]) RemoveItem(key K) *Builder[T, K] {
 		}
 	}
 
-	// Compact items slice. Nil out the tail so removed *node pointers can be GC'd.
 	kept := b.items[:0]
 	for _, n := range b.items {
 		if !toRemove[n.key] {
@@ -410,11 +434,17 @@ func (b *Builder[T, K]) RemoveItem(key K) *Builder[T, K] {
 // Example:
 //
 //	b.MoveItem(5, 2) // move item with key 5 under parent with key 2
-func (b *Builder[T, K]) MoveItem(key, newParentKey K) *Builder[T, K] {
+func (b *Builder[T]) MoveItem(key, newParentKey any) *Builder[T] {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	b.ensureBuiltLocked() // populate hasParent/parentKey before cycle detection
+	if b.keyFn == nil {
+		return b
+	}
+
+	if err := b.ensureBuiltLocked(); err != nil {
+		return b
+	}
 
 	if _, ok := b.index[key]; !ok {
 		return b
@@ -430,7 +460,7 @@ func (b *Builder[T, K]) MoveItem(key, newParentKey K) *Builder[T, K] {
 	}
 
 	if b.parentOverrides == nil {
-		b.parentOverrides = make(map[K]K)
+		b.parentOverrides = make(map[any]any)
 	}
 	b.parentOverrides[key] = newParentKey
 	b.dirty = true
@@ -444,7 +474,7 @@ func (b *Builder[T, K]) MoveItem(key, newParentKey K) *Builder[T, K] {
 // Example:
 //
 //	b.UpdateItem(1, func(d *Dept) { d.Name = "Engineering" })
-func (b *Builder[T, K]) UpdateItem(key K, fn func(*T)) *Builder[T, K] {
+func (b *Builder[T]) UpdateItem(key any, fn func(*T)) *Builder[T] {
 	if fn == nil {
 		return b
 	}
@@ -477,49 +507,35 @@ func (b *Builder[T, K]) UpdateItem(key K, fn func(*T)) *Builder[T, K] {
 // Example:
 //
 //	active := b.Filter(func(d Dept) bool { return d.Active })
-func (b *Builder[T, K]) Filter(predicate func(T) bool) *Builder[T, K] {
+func (b *Builder[T]) Filter(predicate func(T) bool) *Builder[T] {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	b.ensureBuiltLocked()
-
-	nb := &Builder[T, K]{
+	nb := &Builder[T]{
 		keyFn:    b.keyFn,
 		parentFn: b.parentFn,
 		sortFn:   b.sortFn,
-		items:    make([]*node[T, K], 0),
-		index:    make(map[K]*node[T, K]),
+		items:    make([]*node[T], 0, len(b.items)),
+		index:    make(map[any]*node[T], len(b.items)),
 		dirty:    true,
 	}
 
-	stack := make([]*Node[T, K], 0, len(b.roots))
-	stack = append(stack, b.roots...)
-
-	for len(stack) > 0 {
-		cur := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-
-		if predicate == nil || predicate(cur.Item) {
+	for _, n := range b.items {
+		if predicate == nil || predicate(n.item) {
+			copied := *n
 			if b.keyFn != nil {
-				k := b.keyFn(cur.Item)
-				if orig := b.index[k]; orig != nil {
-					copied := *orig
-					nb.items = append(nb.items, &copied)
-					nb.index[k] = &copied
-					if b.parentOverrides != nil {
-						if pk, ok := b.parentOverrides[k]; ok {
-							if nb.parentOverrides == nil {
-								nb.parentOverrides = make(map[K]K)
-							}
-							nb.parentOverrides[k] = pk
-						}
-					}
-				}
+				nb.index[copied.key] = &copied
 			}
+			nb.items = append(nb.items, &copied)
 		}
+	}
 
-		for i := len(cur.Children) - 1; i >= 0; i-- {
-			stack = append(stack, cur.Children[i])
+	if b.parentOverrides != nil && len(nb.items) > 0 {
+		nb.parentOverrides = make(map[any]any, len(b.parentOverrides))
+		for _, n := range nb.items {
+			if pk, ok := b.parentOverrides[n.key]; ok {
+				nb.parentOverrides[n.key] = pk
+			}
 		}
 	}
 
@@ -533,7 +549,7 @@ func (b *Builder[T, K]) Filter(predicate func(T) bool) *Builder[T, K] {
 // Example:
 //
 //	b.Transform(func(d *Dept) { d.Name = strings.ToUpper(d.Name) })
-func (b *Builder[T, K]) Transform(fn func(*T)) *Builder[T, K] {
+func (b *Builder[T]) Transform(fn func(*T)) *Builder[T] {
 	if fn == nil {
 		return b
 	}
@@ -547,22 +563,157 @@ func (b *Builder[T, K]) Transform(fn func(*T)) *Builder[T, K] {
 	return b
 }
 
+// Map returns a new Builder with all items transformed by fn.
+// The new Builder inherits parent and sort functions from the original.
+// Key function must be provided for the new type.
+//
+// Example:
+//
+//	ids := b.Map(func(d Dept) string { return d.Name })
+func (b *Builder[T]) Map(fn func(T) T, keyFn func(T) any) *Builder[T] {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	nb := &Builder[T]{
+		keyFn:    keyFn,
+		parentFn: b.parentFn,
+		sortFn:   b.sortFn,
+		items:    make([]*node[T], 0, len(b.items)),
+		index:    make(map[any]*node[T], len(b.items)),
+		dirty:    true,
+	}
+
+	for _, n := range b.items {
+		mapped := fn(n.item)
+		newNode := &node[T]{item: mapped, insertOrder: n.insertOrder}
+		if keyFn != nil {
+			newNode.key = keyFn(mapped)
+			nb.index[newNode.key] = newNode
+		}
+		nb.items = append(nb.items, newNode)
+	}
+
+	if b.parentOverrides != nil && len(nb.items) > 0 {
+		nb.parentOverrides = make(map[any]any, len(b.parentOverrides))
+		for _, n := range nb.items {
+			if pk, ok := b.parentOverrides[n.key]; ok {
+				nb.parentOverrides[n.key] = pk
+			}
+		}
+	}
+
+	nb.insertCtr = len(nb.items)
+	return nb
+}
+
+// Find returns the first node matching predicate, or nil if not found.
+// Searches in insertion order (not tree order).
+//
+// Example:
+//
+//	node := b.Find(func(d Dept) bool { return d.Name == "HR" })
+func (b *Builder[T]) Find(predicate func(T) bool) *Node[T] {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.keyFn == nil {
+		return nil
+	}
+
+	if err := b.ensureBuiltLocked(); err != nil {
+		return nil
+	}
+
+	for _, n := range b.items {
+		if predicate(n.item) {
+			return b.nodeCache[n.key]
+		}
+	}
+	return nil
+}
+
+// Contains returns true if a node with the given key exists.
+//
+// Example:
+//
+//	exists := b.Contains(5)
+func (b *Builder[T]) Contains(key any) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.keyFn == nil {
+		return false
+	}
+
+	if err := b.ensureBuiltLocked(); err != nil {
+		return false
+	}
+	_, ok := b.nodeCache[key]
+	return ok
+}
+
+// Depth returns the depth of the node at key (root = 1).
+// Returns 0 if key does not exist.
+//
+// Example:
+//
+//	depth := b.Depth(5)
+func (b *Builder[T]) Depth(key any) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.keyFn == nil {
+		return 0
+	}
+
+	if err := b.ensureBuiltLocked(); err != nil {
+		return 0
+	}
+
+	target, ok := b.nodeCache[key]
+	if !ok {
+		return 0
+	}
+
+	type entry struct {
+		n     *Node[T]
+		depth int
+	}
+	stack := make([]entry, 0, len(b.roots)*2)
+	for _, r := range b.roots {
+		stack = append(stack, entry{r, 1})
+	}
+	for len(stack) > 0 {
+		cur := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if cur.n == target {
+			return cur.depth
+		}
+		for _, child := range cur.n.Children {
+			stack = append(stack, entry{child, cur.depth + 1})
+		}
+	}
+	return 0
+}
+
 // Build constructs and returns the tree. Returns root nodes in sort order and a
 // map for direct key lookup. Returns nil, nil if KeyBy is not set.
 // The returned roots slice and nodeMap must not be modified by the caller.
 //
 // Example:
 //
-//	roots, nodeMap := b.Build()
-func (b *Builder[T, K]) Build() ([]*Node[T, K], map[K]*Node[T, K]) {
+//	roots, nodeMap, err := b.Build()
+func (b *Builder[T]) Build() ([]*Node[T], map[any]*Node[T], error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	if b.keyFn == nil {
-		return nil, nil
+		return nil, nil, ErrKeyNotSet
 	}
-	b.ensureBuiltLocked()
-	return b.roots, b.nodeCache
+	if err := b.ensureBuiltLocked(); err != nil {
+		return nil, nil, err
+	}
+	return b.roots, b.nodeCache, nil
 }
 
 // Clone returns a new Builder with an independent deep copy of all items.
@@ -571,17 +722,17 @@ func (b *Builder[T, K]) Build() ([]*Node[T, K], map[K]*Node[T, K]) {
 // Example:
 //
 //	copy := b.Clone()
-func (b *Builder[T, K]) Clone() *Builder[T, K] {
+func (b *Builder[T]) Clone() *Builder[T] {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	nb := &Builder[T, K]{
+	nb := &Builder[T]{
 		keyFn:     b.keyFn,
 		parentFn:  b.parentFn,
 		sortFn:    b.sortFn,
 		insertCtr: b.insertCtr,
-		items:     make([]*node[T, K], len(b.items)),
-		index:     make(map[K]*node[T, K], len(b.index)),
+		items:     make([]*node[T], len(b.items)),
+		index:     make(map[any]*node[T], len(b.index)),
 		dirty:     true,
 	}
 
@@ -594,7 +745,7 @@ func (b *Builder[T, K]) Clone() *Builder[T, K] {
 	}
 
 	if len(b.parentOverrides) > 0 {
-		nb.parentOverrides = make(map[K]K, len(b.parentOverrides))
+		nb.parentOverrides = make(map[any]any, len(b.parentOverrides))
 		maps.Copy(nb.parentOverrides, b.parentOverrides)
 	}
 
@@ -608,19 +759,20 @@ func (b *Builder[T, K]) Clone() *Builder[T, K] {
 // Example:
 //
 //	if errs := b.Validate(); len(errs) != 0 { log.Fatal(errs) }
-func (b *Builder[T, K]) Validate() []error {
+func (b *Builder[T]) Validate() []error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	if b.keyFn == nil {
-		return []error{errors.New("key function not set")}
+		return []error{ErrKeyNotSet}
 	}
 
-	b.ensureBuiltLocked()
+	if err := b.ensureBuiltLocked(); err != nil {
+		return []error{err}
+	}
 
 	var errs []error
 
-	// Orphan check: nodes whose effective parent is not in the built set.
 	for k := range b.nodeCache {
 		n := b.index[k]
 		pk, isRoot := b.effectiveParent(n)
@@ -628,49 +780,56 @@ func (b *Builder[T, K]) Validate() []error {
 			continue
 		}
 		if _, exists := b.nodeCache[pk]; !exists {
-			errs = append(errs, fmt.Errorf("orphaned node %v", k))
+			errs = append(errs, fmt.Errorf("%w: %v", ErrOrphanedNode, k))
 		}
 	}
 
-	// Cycle detection via upward DFS over all nodes in nodeCache.
-	// Nodes in a cycle never appear in roots, so we must start from every node.
 	type state uint8
 	const (
 		unvisited state = iota
 		inProgress
 		done
 	)
-	visited := make(map[K]state, len(b.nodeCache))
-
-	var visit func(k K) bool
-	visit = func(k K) bool {
-		switch visited[k] {
-		case done:
-			return false
-		case inProgress:
-			return true // back-edge: cycle detected
-		}
-		visited[k] = inProgress
-		if n := b.index[k]; n != nil {
-			pk, isRoot := b.effectiveParent(n)
-			if !isRoot {
-				if _, parentExists := b.nodeCache[pk]; parentExists {
-					if visit(pk) {
-						visited[k] = done
-						return true
-					}
-				}
-			}
-		}
-		visited[k] = done
-		return false
-	}
+	visited := make(map[any]state, len(b.nodeCache))
 
 	for k := range b.nodeCache {
-		if visited[k] == unvisited {
-			if visit(k) {
-				errs = append(errs, fmt.Errorf("cycle detected at node %v", k))
+		if visited[k] != unvisited {
+			continue
+		}
+		stack := []any{k}
+		path := make(map[any]struct{})
+		for len(stack) > 0 {
+			cur := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+
+			if _, inPath := path[cur]; inPath {
+				errs = append(errs, fmt.Errorf("%w: %v", ErrCycle, cur))
+				break
 			}
+			if visited[cur] == done {
+				continue
+			}
+			if visited[cur] == inProgress {
+				path[cur] = struct{}{}
+			}
+			visited[cur] = inProgress
+
+			n := b.index[cur]
+			if n == nil {
+				visited[cur] = done
+				continue
+			}
+			pk, isRoot := b.effectiveParent(n)
+			if isRoot {
+				visited[cur] = done
+				continue
+			}
+			if _, parentExists := b.nodeCache[pk]; parentExists {
+				stack = append(stack, pk)
+			}
+		}
+		for k := range path {
+			visited[k] = done
 		}
 	}
 
@@ -684,7 +843,7 @@ func (b *Builder[T, K]) Validate() []error {
 //
 //	stats := b.Statistics()
 //	fmt.Println(stats["totalNodes"], stats["maxDepth"])
-func (b *Builder[T, K]) Statistics() map[string]any {
+func (b *Builder[T]) Statistics() map[string]any {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -698,7 +857,15 @@ func (b *Builder[T, K]) Statistics() map[string]any {
 		}
 	}
 
-	b.ensureBuiltLocked()
+	if err := b.ensureBuiltLocked(); err != nil {
+		return map[string]any{
+			"totalNodes":         0,
+			"rootNodes":          0,
+			"maxDepth":           0,
+			"leafNodes":          0,
+			"avgChildrenPerNode": 0.0,
+		}
+	}
 
 	total := len(b.nodeCache)
 	rootCount := len(b.roots)
@@ -707,7 +874,6 @@ func (b *Builder[T, K]) Statistics() map[string]any {
 
 	var avg float64
 	if total > 0 {
-		// Each non-root node is a child of exactly one parent.
 		avg = float64(total-rootCount) / float64(total)
 	}
 
