@@ -196,7 +196,7 @@ func TestRepo_Update_WithScopes(t *testing.T) {
 	user := &TestUser{Name: "UpdatedName"}
 
 	// Test with scope
-	_ = repo.Update(ctx, db, user, Condition("id", 1))
+	_ = repo.Update(ctx, db, user, Equal("id", 1))
 }
 
 // Test Suite for UpdateFields Method
@@ -228,7 +228,7 @@ func TestRepo_UpdateFields_ValidInput(t *testing.T) {
 		"age":  35,
 	}
 
-	_ = repo.UpdateFields(ctx, db, fields, Condition("id", 1))
+	_ = repo.UpdateFields(ctx, db, fields, Equal("id", 1))
 }
 
 // Test Suite for QueryOne Method
@@ -245,7 +245,7 @@ func TestRepo_QueryOne_ReturnsErrNotFound(t *testing.T) {
 		Statement: &gorm.Statement{},
 	}
 
-	_, err := repo.QueryOne(ctx, db, Condition("id", 999))
+	_, err := repo.QueryOne(ctx, db, Equal("id", 999))
 
 	// Without a real DB, this will fail with a different error
 	// But in a real test with a DB, you would check:
@@ -267,7 +267,7 @@ func TestRepo_Query_ReturnsEmptySlice(t *testing.T) {
 	}
 
 	// Query with conditions
-	_, err := repo.Query(ctx, db, Condition("age", 999))
+	_, err := repo.Query(ctx, db, Equal("age", 999))
 
 	// Without a real DB, this will likely error
 	// But in a real test, an empty result set should not error
@@ -285,7 +285,7 @@ func TestRepo_Query_WithMultipleScopes(t *testing.T) {
 
 	// Query with multiple scopes
 	_, err := repo.Query(ctx, db,
-		Condition("age", 30),
+		Equal("age", 30),
 		OrderBy("name", "asc"),
 		Limit(10),
 	)
@@ -305,7 +305,7 @@ func TestRepo_Count_ReturnsZero(t *testing.T) {
 	}
 
 	// Count with conditions
-	_, err := repo.Count(ctx, db, Condition("age", 999))
+	_, err := repo.Count(ctx, db, Equal("age", 999))
 
 	// Without a real DB, this will error
 	// But in a real test, zero count should not error
@@ -324,7 +324,7 @@ func TestRepo_Delete_WithScopes(t *testing.T) {
 	}
 
 	// Delete with conditions
-	err := repo.Delete(ctx, db, Condition("id", 1))
+	err := repo.Delete(ctx, db, Equal("id", 1))
 
 	// Without a real DB, this will error
 	_ = err
@@ -497,7 +497,7 @@ func ExampleRepo_QueryOne() {
 
 	var db *gorm.DB
 
-	user, err := repo.QueryOne(ctx, db, Condition("email", "alice@example.com"))
+	user, err := repo.QueryOne(ctx, db, Equal("email", "alice@example.com"))
 	if errors.Is(err, ErrNotFound) {
 		// Handle not found case
 		return
@@ -517,7 +517,7 @@ func ExampleRepo_Query() {
 	var db *gorm.DB
 
 	users, err := repo.Query(ctx, db,
-		Condition("age", 30),
+		Equal("age", 30),
 		OrderBy("name", "asc"),
 		Limit(10),
 	)
