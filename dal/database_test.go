@@ -438,12 +438,7 @@ func TestHandleExecError_Usage(t *testing.T) {
 
 func TestHandleQueryError_Usage(t *testing.T) {
 	t.Run("should not error on zero rows", func(t *testing.T) {
-		result := &gorm.DB{
-			RowsAffected: 0,
-			Error:        nil,
-		}
-
-		err := handleQueryError(result, "test query")
+		err := handleQueryError("test query", nil)
 		if err != nil {
 			t.Errorf("Query with 0 rows should not error, got %v", err)
 		}
@@ -451,12 +446,8 @@ func TestHandleQueryError_Usage(t *testing.T) {
 
 	t.Run("should detect database error", func(t *testing.T) {
 		dbErr := errors.New("connection lost")
-		result := &gorm.DB{
-			RowsAffected: 10,
-			Error:        dbErr,
-		}
 
-		err := handleQueryError(result, "test query")
+		err := handleQueryError("test query", dbErr)
 		if err == nil {
 			t.Error("Expected error for database error")
 		}
