@@ -1,7 +1,6 @@
 package time
 
 import (
-	"fmt"
 	"sync"
 	"time"
 )
@@ -19,21 +18,6 @@ var (
 //	ParseInLocation("2006-01-02 15:04", "2024-03-15 14:30", loc)
 func ParseInLocation(layout, value string, location *time.Location) (time.Time, error) {
 	return time.ParseInLocation(layout, value, location)
-}
-
-// ParseInBeijing parses a time string in Beijing timezone (UTC+8).
-//
-// Example:
-//
-//	ParseInBeijing("2006-01-02 15:04", "2024-03-15 14:30")
-func ParseInBeijing(layout, value string) (time.Time, error) {
-	beijingLocOnce.Do(func() {
-		beijingLoc, _ = time.LoadLocation("Asia/Shanghai")
-	})
-	if beijingLoc == nil {
-		return time.Time{}, fmt.Errorf("failed to load Asia/Shanghai timezone")
-	}
-	return time.ParseInLocation(layout, value, beijingLoc)
 }
 
 // StartOfDay returns the start of day (00:00:00) for t.

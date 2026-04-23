@@ -58,8 +58,10 @@ func TestExecutor_WithTimeout(t *testing.T) {
 
 	handler := func(ctx context.Context, item int) error {
 		if item == 2 {
+			timer := time.NewTimer(200 * time.Millisecond)
+			defer timer.Stop()
 			select {
-			case <-time.After(200 * time.Millisecond):
+			case <-timer.C:
 				return nil
 			case <-ctx.Done():
 				return ctx.Err()

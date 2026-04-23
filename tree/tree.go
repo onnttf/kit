@@ -1,10 +1,11 @@
 package tree
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
-	"sort"
+	"slices"
 	"sync"
 )
 
@@ -212,6 +213,7 @@ func (b *Builder[T]) buildTree() error {
 	if b.sortFn != nil {
 		b.sortNodes(b.roots)
 	}
+	return nil
 }
 
 // effectiveParent returns the effective parent key for n, accounting for
@@ -236,16 +238,18 @@ func (b *Builder[T]) sortNodes(roots []*Node[T]) {
 	type frame struct{ children []*Node[T] }
 	stack := make([]frame, 0, len(roots)*4)
 	stack = append(stack, frame{roots})
+	keyFn := b.keyFn
+	index := b.index
 	for len(stack) > 0 {
 		top := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		if len(top.children) <= 1 {
 			continue
 		}
-		sort.SliceStable(top.children, func(i, j int) bool {
-			ki := b.keyFn(top.children[i].Item)
-			kj := b.keyFn(top.children[j].Item)
-			return b.index[ki].sortVal < b.index[kj].sortVal
+		slices.SortFunc(top.children, func(a, b *Node[T]) int {
+			ka := keyFn(a.Item)
+			kb := keyFn(b.Item)
+			return cmp.Compare(index[ka].sortVal, index[kb].sortVal)
 		})
 		for _, n := range top.children {
 			if len(n.Children) > 1 {
@@ -780,7 +784,7 @@ func (b *Builder[T]) Validate() []error {
 			continue
 		}
 		if _, exists := b.nodeCache[pk]; !exists {
-			errs = append(errs, fmt.Errorf("%w: %v", ErrOrphanedNode, k))
+			errs = append(errs, fmt.Errorf("orphaned node: %v", k))
 		}
 	}
 
@@ -803,7 +807,7 @@ func (b *Builder[T]) Validate() []error {
 			stack = stack[:len(stack)-1]
 
 			if _, inPath := path[cur]; inPath {
-				errs = append(errs, fmt.Errorf("%w: %v", ErrCycle, cur))
+				errs = append(errs, fmt.Errorf("cycle detected: %v", cur))
 				break
 			}
 			if visited[cur] == done {
