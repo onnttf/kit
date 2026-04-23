@@ -12,48 +12,207 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-const excelTag = "excel"
+const tagKey = "excel"
 
 var structCache sync.Map // map[reflect.Type]structInfo
 
-// IsXLSX reports whether the file has an .xlsx extension.
+// IsXLSX reports whether the filename has .xlsx extension.
 func IsXLSX(filename string) bool {
 	return strings.EqualFold(filepath.Ext(filename), ".xlsx")
 }
 
-type structField struct {
-	index int
-}
-
-type structInfo struct {
-	typ    reflect.Type
-	fields map[int]structField
-}
-
-// Read reads all sheets from the Excel file at path.
+// Read reads all sheets from the Excel file.
 // The returned map keys are sheet names.
 //
 // Example:
 //
-//	data, err := excel.Read("test.xlsx")
-//	for sheetName, rows := range data {
-//	    fmt.Println("Sheet:", sheetName)
+//	data, err := Read("test.xlsx")
+//	for name, rows := range data {
 //	    for _, row := range rows {
-//	        fmt.Println(row)
+//	        fmt.Println(name, row)
 //	    }
 //	}
 func Read(path string) (map[string][][]string, error) {
+	wb, err := Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer wb.Close()
+	return wb.ReadAll()
+}
+
+// ReadSheet reads a single sheet from the Excel file.
+//
+// Example:
+//
+//	rows, err := ReadSheet("test.xlsx", "Sheet1")
+//	for _, row := range rows {
+//	    fmt.Println(row)
+//	}
+func ReadSheet(path, name string) ([][]string, error) {
+	wb, err := Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer wb.Close()
+	return wb.Sheet(name).Rows()
+}
+
+// Walk iterates over rows and calls fn.
+// If fn returns an error, iteration stops.
+// fn receives the row index (1-based) and the row values.
+//
+// Example:
+//
+//	err := Walk("test.xlsx", "Sheet1", func(idx int, row []string) error {
+//	    fmt.Println(idx, row)
+//	    return nil
+//	})
+func Walk(path, name string, fn func(int, []string) error) error {
+	wb, err := Open(path)
+	if err != nil {
+		return err
+	}
+	defer wb.Close()
+	return wb.Sheet(name).Scan(fn)
+}
+
+// ScanRow reads the sheet and calls fn for each row.
+// Parsing errors are skipped. If fn returns an error, the scan stops.
+// fn receives the row index (1-based) and the parsed value.
+//
+// Example:
+//
+//	type Person struct {
+//	    Name string `excel:"A"`
+//	    Age  int    `excel:"B"`
+//	}
+//
+//	err := ScanRow[Person]("test.xlsx", "Sheet1", func(idx int, p *Person) error {
+//	    fmt.Println(idx, p.Name)
+//	    return nil
+//	})
+func ScanRow[T any](path, name string, fn func(int, *T) error) error {
+	wb, err := Open(path)
+	if err != nil {
+		return err
+	}
+	defer wb.Close()
+
+	return wb.Sheet(name).Scan(func(idx int, row []string) error {
+		v, err := Parse[T](row)
+		if err != nil {
+			return nil
+		}
+		return fn(idx, v)
+	})
+}
+
+// ScanAll reads the sheet and returns all rows parsed as T.
+// Rows that fail to parse are returned as nil.
+//
+// Example:
+//
+//	people, err := ScanAll[Person]("test.xlsx", "Sheet1")
+func ScanAll[T any](path, name string) ([]*T, error) {
+	wb, err := Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer wb.Close()
+
+	var result []*T
+	wb.Sheet(name).Scan(func(_ int, row []string) error {
+		v, _ := Parse[T](row)
+		result = append(result, v)
+		return nil
+	})
+	return result, nil
+}
+
+// Parse parses a row into type T.
+// Rows with fewer columns than required fields are handled gracefully.
+//
+// Example:
+//
+//	person, err := Parse[Person]([]string{"Alice", "25"})
+func Parse[T any](row []string) (*T, error) {
+	info := getStructInfo[T]()
+	v := reflect.New(info.typ).Elem()
+
+	for colIdx, f := range info.fields {
+		if colIdx >= len(row) {
+			continue
+		}
+		if err := setField(v.Field(f.index), row[colIdx]); err != nil {
+			return nil, fmt.Errorf("column %s: %w", columnName(colIdx), err)
+		}
+	}
+
+	result := new(T)
+	reflect.ValueOf(result).Elem().Set(v)
+	return result, nil
+}
+
+// Workbook represents an Excel workbook.
+type Workbook struct {
+	path string
+	file *excelize.File
+}
+
+// Open opens an Excel file.
+//
+// Example:
+//
+//	wb, err := Open("test.xlsx")
+//	if err != nil {
+//	    return err
+//	}
+//	defer wb.Close()
+func Open(path string) (*Workbook, error) {
 	f, err := excelize.OpenFile(path)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	return &Workbook{path: path, file: f}, nil
+}
 
-	sheets := f.GetSheetList()
+// Close closes the workbook.
+func (w *Workbook) Close() error {
+	if w.file != nil {
+		return w.file.Close()
+	}
+	return nil
+}
+
+// Sheets returns all sheet names.
+//
+// Example:
+//
+//	names := wb.Sheets()
+func (w *Workbook) Sheets() []string {
+	if w.file == nil {
+		return []string{}
+	}
+	return w.file.GetSheetList()
+}
+
+// Sheet returns a Sheet by name.
+func (w *Workbook) Sheet(name string) *Sheet {
+	return &Sheet{file: w.file, name: name}
+}
+
+// ReadAll reads all sheets and returns a map of sheet names to rows.
+//
+// Example:
+//
+//	data, err := wb.ReadAll()
+func (w *Workbook) ReadAll() (map[string][][]string, error) {
+	sheets := w.Sheets()
 	result := make(map[string][][]string, len(sheets))
 
 	for _, sheet := range sheets {
-		rows, err := f.GetRows(sheet)
+		rows, err := w.Sheet(sheet).Rows()
 		if err != nil {
 			return nil, err
 		}
@@ -63,155 +222,68 @@ func Read(path string) (map[string][][]string, error) {
 	return result, nil
 }
 
-// ReadSheet reads a single sheet from the Excel file.
-//
-// Example:
-//
-//	rows, err := excel.ReadSheet("test.xlsx", "Sheet1")
-//	for _, row := range rows {
-//	    fmt.Println(row)
-//	}
-func ReadSheet(path, sheet string) ([][]string, error) {
-	f, err := excelize.OpenFile(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	return f.GetRows(sheet)
+// Sheet represents an Excel sheet.
+type Sheet struct {
+	file *excelize.File
+	name string
 }
 
-// Walk reads the Excel file row by row and calls fn for each row.
-// It avoids loading the entire sheet into memory.
-//
-// Example:
-//
-//	err := excel.Walk("test.xlsx", "Sheet1", func(index int, row []string) error {
-//	    fmt.Println(index, row)
-//	    return nil
-//	})
-func Walk(path, sheet string, fn func(index int, row []string) error) error {
-	f, err := excelize.OpenFile(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
+// Rows returns all rows as [][]string.
+func (s *Sheet) Rows() ([][]string, error) {
+	return s.file.GetRows(s.name)
+}
 
-	rows, err := f.Rows(sheet)
+// Scan iterates over rows and calls fn.
+// If fn returns an error, iteration stops.
+func (s *Sheet) Scan(fn func(idx int, row []string) error) error {
+	rows, err := s.file.Rows(s.name)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
-	index := 1
+	i := 1
 	for rows.Next() {
-		columns, err := rows.Columns()
+		cols, err := rows.Columns()
 		if err != nil {
 			return err
 		}
-
-		if err := fn(index, columns); err != nil {
+		if err := fn(i, cols); err != nil {
 			return err
 		}
-		index++
+		i++
 	}
-
 	return rows.Error()
 }
 
-// Scan reads the Excel file row by row, unmarshals each row into T,
-// and calls fn for each row.
-//
-// Rows that fail to parse are skipped.
-//
-// Example:
-//
-//	type Person struct {
-//	    Name string `excel:"A"`
-//	    Age  int    `excel:"B"`
-//	}
-//
-//	err := excel.Scan("test.xlsx", "Sheet1", func(index int, row *Person) error {
-//	    fmt.Printf("Row %d: Name: %s, Age: %d\n", index, row.Name, row.Age)
-//	    return nil
-//	})
-func Scan[T any](path, sheet string, fn func(index int, row *T) error) error {
-	f, err := excelize.OpenFile(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	rows, err := f.Rows(sheet)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	info := getStructInfo[T]()
-
-	index := 1
-	for rows.Next() {
-		columns, err := rows.Columns()
-		if err != nil {
-			return err
-		}
-
-		v, err := unmarshalRow(columns, info.typ, info.fields, index)
-		if err != nil {
-			index++
-			continue
-		}
-
-		t := v.Interface().(T)
-
-		if err := fn(index, &t); err != nil {
-			return err
-		}
-		index++
-	}
-
-	return rows.Error()
+// Row represents a row of cell values.
+type Row struct {
+	values []string
+	index  int
 }
 
-// ScanSheet reads all rows from sheet and returns them as a slice of T.
-//
-// Example:
-//
-//	type Person struct {
-//	    Name string `excel:"A"`
-//	    Age  int    `excel:"B"`
-//	}
-//
-// Rows that fail to parse are returned as nil.
-func ScanSheet[T any](path, sheet string) ([]*T, error) {
-	f, err := excelize.OpenFile(path)
-	if err != nil {
-		return nil, err
+// Values returns the cell values.
+func (r *Row) Values() []string {
+	return r.values
+}
+
+// Index returns the row number (1-based).
+func (r *Row) Index() int {
+	return r.index
+}
+
+// Value returns the value at column col (0-based).
+// Returns empty string if col is out of range.
+func (r *Row) Value(col int) string {
+	if col < 0 || col >= len(r.values) {
+		return ""
 	}
-	defer f.Close()
+	return r.values[col]
+}
 
-	rows, err := f.GetRows(sheet)
-	if err != nil {
-		return nil, err
-	}
-
-	info := getStructInfo[T]()
-
-	result := make([]*T, 0, len(rows))
-
-	for i, row := range rows {
-		v, err := unmarshalRow(row, info.typ, info.fields, i+1)
-		if err != nil {
-			result = append(result, nil)
-			continue
-		}
-
-		t := v.Interface().(T)
-		result = append(result, &t)
-	}
-
-	return result, nil
+// Len returns the number of cells.
+func (r *Row) Len() int {
+	return len(r.values)
 }
 
 func getStructInfo[T any]() structInfo {
@@ -234,13 +306,13 @@ func getStructInfo[T any]() structInfo {
 	return info
 }
 
-func buildFieldIndex(typ reflect.Type) map[int]structField {
-	index := make(map[int]structField)
+func buildFieldIndex(typ reflect.Type) map[int]fieldInfo {
+	index := make(map[int]fieldInfo)
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 
-		tag := field.Tag.Get(excelTag)
+		tag := field.Tag.Get(tagKey)
 		if tag == "" || tag == "-" {
 			continue
 		}
@@ -250,7 +322,7 @@ func buildFieldIndex(typ reflect.Type) map[int]structField {
 			continue
 		}
 
-		index[col] = structField{index: i}
+		index[col] = fieldInfo{index: i}
 	}
 
 	return index
@@ -264,12 +336,10 @@ func columnIndex(col string) (int, error) {
 	}
 
 	n := 0
-
 	for _, c := range col {
 		if c < 'A' || c > 'Z' {
 			return 0, fmt.Errorf("invalid column: %q", col)
 		}
-
 		n = n*26 + int(c-'A'+1)
 	}
 
@@ -282,38 +352,15 @@ func columnName(n int) string {
 	}
 
 	var s string
-
 	for n >= 0 {
 		s = string(rune('A'+n%26)) + s
 		n = n/26 - 1
-
 		if n < 0 {
 			break
 		}
 	}
 
 	return s
-}
-
-func unmarshalRow(
-	columns []string,
-	typ reflect.Type,
-	fields map[int]structField,
-	row int,
-) (reflect.Value, error) {
-	v := reflect.New(typ).Elem()
-
-	for colIndex, f := range fields {
-		if colIndex >= len(columns) {
-			continue
-		}
-
-		if err := setField(v.Field(f.index), columns[colIndex]); err != nil {
-			return reflect.Value{}, fmt.Errorf("row %d, column %s: %w", row, columnName(colIndex), err)
-		}
-	}
-
-	return v, nil
 }
 
 func setField(v reflect.Value, s string) error {
@@ -347,7 +394,6 @@ func parseValue(v reflect.Value, s string) error {
 	}
 
 	switch v.Kind() {
-
 	case reflect.String:
 		v.SetString(s)
 
@@ -356,7 +402,6 @@ func parseValue(v reflect.Value, s string) error {
 		if err != nil {
 			return fmt.Errorf("parse int %q: %w", s, err)
 		}
-
 		v.SetInt(n)
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
@@ -364,7 +409,6 @@ func parseValue(v reflect.Value, s string) error {
 		if err != nil {
 			return fmt.Errorf("parse uint %q: %w", s, err)
 		}
-
 		v.SetUint(n)
 
 	case reflect.Float32, reflect.Float64:
@@ -372,7 +416,6 @@ func parseValue(v reflect.Value, s string) error {
 		if err != nil {
 			return fmt.Errorf("parse float %q: %w", s, err)
 		}
-
 		v.SetFloat(n)
 
 	case reflect.Bool:
@@ -380,7 +423,6 @@ func parseValue(v reflect.Value, s string) error {
 		if err != nil {
 			return fmt.Errorf("parse bool %q: %w", s, err)
 		}
-
 		v.SetBool(n)
 
 	default:
@@ -388,4 +430,13 @@ func parseValue(v reflect.Value, s string) error {
 	}
 
 	return nil
+}
+
+type fieldInfo struct {
+	index int
+}
+
+type structInfo struct {
+	typ    reflect.Type
+	fields map[int]fieldInfo
 }

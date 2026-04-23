@@ -15,7 +15,7 @@ type testItem struct {
 
 func newBuilder() *Builder[testItem] {
 	return NewBuilder[testItem]().
-		ParentBy(func(d testItem) int { return d.ParentID }).
+		ParentBy(func(d testItem) any { return d.ParentID }).
 		SortBy(func(d testItem) int { return d.Sort })
 }
 
@@ -86,7 +86,7 @@ func TestWithItemsNil(t *testing.T) {
 }
 
 func TestBuildWithItems(t *testing.T) {
-	roots, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).Build()
+	roots, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).Build()
 	if len(roots) != 1 {
 		t.Errorf("expected 1 root, got %d", len(roots))
 	}
@@ -103,7 +103,7 @@ func TestBuildWithItems(t *testing.T) {
 
 func TestBuildNilParentBy(t *testing.T) {
 	b := NewBuilder[testItem]().
-		KeyBy(func(d testItem) int { return d.ID }).
+		KeyBy(func(d testItem) any { return d.ID }).
 		WithItems(newItems())
 	roots, nodeMap, _ := b.Build()
 	if len(roots) != 5 {
@@ -115,7 +115,7 @@ func TestBuildNilParentBy(t *testing.T) {
 }
 
 func TestAddItem(t *testing.T) {
-	b := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems())
+	b := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems())
 	b.AddItem(testItem{ID: 6, ParentID: 2, Sort: 3, Name: "grandchild-3"})
 	roots, nodeMap, _ := b.Build()
 
@@ -136,8 +136,8 @@ func TestAddItem(t *testing.T) {
 
 func TestAddItemPreservesInsertionOrder(t *testing.T) {
 	b := NewBuilder[testItem]().
-		KeyBy(func(d testItem) int { return d.ID }).
-		ParentBy(func(d testItem) int { return d.ParentID }).
+		KeyBy(func(d testItem) any { return d.ID }).
+		ParentBy(func(d testItem) any { return d.ParentID }).
 		WithItems(nil)
 
 	b.AddItem(testItem{ID: 1, ParentID: 1, Name: "root"})
@@ -158,7 +158,7 @@ func TestAddItemPreservesInsertionOrder(t *testing.T) {
 }
 
 func TestRemoveItem(t *testing.T) {
-	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).RemoveItem(2).Build()
+	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).RemoveItem(2).Build()
 
 	if _, ok := nodeMap[2]; ok {
 		t.Error("node 2 should be removed")
@@ -175,14 +175,14 @@ func TestRemoveItem(t *testing.T) {
 }
 
 func TestRemoveItemNotExist(t *testing.T) {
-	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).RemoveItem(99).Build()
+	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).RemoveItem(99).Build()
 	if len(nodeMap) != 5 {
 		t.Errorf("expected 5 nodes after removing non-existent key, got %d", len(nodeMap))
 	}
 }
 
 func TestRemoveRoot(t *testing.T) {
-	roots, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).RemoveItem(1).Build()
+	roots, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).RemoveItem(1).Build()
 	if len(nodeMap) != 0 {
 		t.Errorf("removing root should remove all nodes, got %d", len(nodeMap))
 	}
@@ -192,7 +192,7 @@ func TestRemoveRoot(t *testing.T) {
 }
 
 func TestMoveItem(t *testing.T) {
-	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).MoveItem(5, 2).Build()
+	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).MoveItem(5, 2).Build()
 
 	if len(nodeMap[1].Children) != 1 {
 		t.Errorf("node 1 should have 1 child after move, got %d", len(nodeMap[1].Children))
@@ -203,14 +203,14 @@ func TestMoveItem(t *testing.T) {
 }
 
 func TestMoveItemSelfIsNoop(t *testing.T) {
-	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).MoveItem(2, 2).Build()
+	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).MoveItem(2, 2).Build()
 	if len(nodeMap[1].Children) != 2 {
 		t.Errorf("self-move should be no-op, node 1 should have 2 children, got %d", len(nodeMap[1].Children))
 	}
 }
 
 func TestMoveItemCycleIsNoop(t *testing.T) {
-	roots, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).MoveItem(1, 3).Build()
+	roots, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).MoveItem(1, 3).Build()
 	if len(roots) != 1 {
 		t.Errorf("cycle move should be no-op, expected 1 root, got %d", len(roots))
 	}
@@ -220,14 +220,14 @@ func TestMoveItemCycleIsNoop(t *testing.T) {
 }
 
 func TestMoveItemNotExist(t *testing.T) {
-	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).MoveItem(99, 1).Build()
+	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).MoveItem(99, 1).Build()
 	if len(nodeMap) != 5 {
 		t.Errorf("expected 5 nodes, got %d", len(nodeMap))
 	}
 }
 
 func TestUpdateItem(t *testing.T) {
-	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).
+	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).
 		UpdateItem(5, func(d *testItem) { d.Sort = 99 }).
 		Build()
 
@@ -237,14 +237,14 @@ func TestUpdateItem(t *testing.T) {
 }
 
 func TestUpdateItemNilFnIsNoop(t *testing.T) {
-	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).UpdateItem(5, nil).Build()
+	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).UpdateItem(5, nil).Build()
 	if nodeMap[5].Item.Sort != 3 {
 		t.Errorf("nil fn should not change item, got Sort=%d", nodeMap[5].Item.Sort)
 	}
 }
 
 func TestUpdateItemNotExist(t *testing.T) {
-	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).
+	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).
 		UpdateItem(99, func(d *testItem) { d.Sort = 0 }).
 		Build()
 	if len(nodeMap) != 5 {
@@ -253,7 +253,7 @@ func TestUpdateItemNotExist(t *testing.T) {
 }
 
 func TestUpdateItemKeyChange(t *testing.T) {
-	b := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems())
+	b := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems())
 	b.UpdateItem(5, func(d *testItem) { d.ID = 50 })
 	_, nodeMap, _ := b.Build()
 
@@ -266,7 +266,7 @@ func TestUpdateItemKeyChange(t *testing.T) {
 }
 
 func TestFilter(t *testing.T) {
-	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).
+	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).
 		Filter(func(d testItem) bool { return d.Sort%2 == 1 }).
 		Build()
 
@@ -278,7 +278,7 @@ func TestFilter(t *testing.T) {
 }
 
 func TestFilterEmpty(t *testing.T) {
-	roots, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).
+	roots, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).
 		Filter(func(d testItem) bool { return false }).
 		Build()
 	if len(nodeMap) != 0 {
@@ -290,7 +290,7 @@ func TestFilterEmpty(t *testing.T) {
 }
 
 func TestFilterInheritsKeyFunctions(t *testing.T) {
-	filtered := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).
+	filtered := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).
 		Filter(func(d testItem) bool { return d.ID <= 2 })
 	roots, nodeMap, _ := filtered.Build()
 
@@ -301,14 +301,14 @@ func TestFilterInheritsKeyFunctions(t *testing.T) {
 }
 
 func TestFilterNilPredicateRetainsAll(t *testing.T) {
-	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).Filter(nil).Build()
+	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).Filter(nil).Build()
 	if len(nodeMap) != 5 {
 		t.Errorf("nil predicate should retain all nodes, got %d", len(nodeMap))
 	}
 }
 
 func TestTransform(t *testing.T) {
-	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).
+	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).
 		Transform(func(d *testItem) { d.Sort = 42 }).
 		Build()
 	for _, n := range nodeMap {
@@ -319,14 +319,14 @@ func TestTransform(t *testing.T) {
 }
 
 func TestTransformNilIsNoop(t *testing.T) {
-	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).Transform(nil).Build()
+	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).Transform(nil).Build()
 	if len(nodeMap) != 5 {
 		t.Errorf("nil transform should be no-op, got %d", len(nodeMap))
 	}
 }
 
 func TestCloneIndependence(t *testing.T) {
-	original := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems())
+	original := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems())
 	cloned := original.Clone()
 
 	cloned.UpdateItem(1, func(d *testItem) { d.Sort = 999 })
@@ -343,7 +343,7 @@ func TestCloneIndependence(t *testing.T) {
 }
 
 func TestCloneSharesFunctions(t *testing.T) {
-	original := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems())
+	original := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems())
 	cloned := original.Clone()
 
 	_, cloneMap, _ := cloned.Build()
@@ -353,7 +353,7 @@ func TestCloneSharesFunctions(t *testing.T) {
 }
 
 func TestClonePreservesOverrides(t *testing.T) {
-	original := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).MoveItem(5, 2)
+	original := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).MoveItem(5, 2)
 	cloned := original.Clone()
 
 	_, origMap, _ := original.Build()
@@ -366,7 +366,7 @@ func TestClonePreservesOverrides(t *testing.T) {
 }
 
 func TestValidateValid(t *testing.T) {
-	errs := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).Validate()
+	errs := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).Validate()
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for valid tree, got %v", errs)
 	}
@@ -378,8 +378,8 @@ func TestValidateCycle(t *testing.T) {
 		{ID: 20, ParentID: 10, Name: "B"},
 	}
 	b := NewBuilder[testItem]().
-		KeyBy(func(d testItem) int { return d.ID }).
-		ParentBy(func(d testItem) int { return d.ParentID }).
+		KeyBy(func(d testItem) any { return d.ID }).
+		ParentBy(func(d testItem) any { return d.ParentID }).
 		WithItems(items)
 	errs := b.Validate()
 	if len(errs) == 0 {
@@ -402,7 +402,7 @@ func TestValidateOrphan(t *testing.T) {
 		{ID: 1, ParentID: 1, Name: "root"},
 		{ID: 2, ParentID: 99, Name: "orphan"},
 	}
-	b := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(items)
+	b := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(items)
 	errs := b.Validate()
 	found := false
 	for _, e := range errs {
@@ -428,7 +428,7 @@ func TestValidateNilKeyBy(t *testing.T) {
 }
 
 func TestStatistics(t *testing.T) {
-	stats := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).Statistics()
+	stats := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).Statistics()
 
 	if stats["totalNodes"] != 5 {
 		t.Errorf("expected totalNodes=5, got %v", stats["totalNodes"])
@@ -449,7 +449,7 @@ func TestStatistics(t *testing.T) {
 }
 
 func TestStatisticsEmpty(t *testing.T) {
-	stats := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(nil).Statistics()
+	stats := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(nil).Statistics()
 	if stats["totalNodes"] != 0 {
 		t.Errorf("expected totalNodes=0, got %v", stats["totalNodes"])
 	}
@@ -465,7 +465,7 @@ func TestStableSortEqualSortVal(t *testing.T) {
 		{ID: 3, ParentID: 1, Sort: 5, Name: "second"},
 		{ID: 4, ParentID: 1, Sort: 5, Name: "third"},
 	}
-	roots, _, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(items).Build()
+	roots, _, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(items).Build()
 	if len(roots) != 1 {
 		t.Fatalf("expected 1 root, got %d", len(roots))
 	}
@@ -483,8 +483,8 @@ func TestStableSortEqualSortVal(t *testing.T) {
 
 func TestInsertionOrderWithoutSortBy(t *testing.T) {
 	b := NewBuilder[testItem]().
-		KeyBy(func(d testItem) int { return d.ID }).
-		ParentBy(func(d testItem) int { return d.ParentID }).
+		KeyBy(func(d testItem) any { return d.ID }).
+		ParentBy(func(d testItem) any { return d.ParentID }).
 		WithItems(nil)
 	b.AddItem(testItem{ID: 1, ParentID: 1, Name: "root"})
 	b.AddItem(testItem{ID: 2, ParentID: 1, Name: "alpha"})
@@ -506,7 +506,7 @@ func TestSelfReferenceRoot(t *testing.T) {
 		{ID: 10, ParentID: 10, Name: "self-ref-root"},
 		{ID: 20, ParentID: 10, Name: "child"},
 	}
-	roots, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(items).Build()
+	roots, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(items).Build()
 	if len(roots) != 1 {
 		t.Errorf("expected 1 root, got %d", len(roots))
 	}
@@ -520,8 +520,8 @@ func TestSelfReferenceRoot(t *testing.T) {
 
 func TestKeyByAfterWithItems(t *testing.T) {
 	b := NewBuilder[testItem]().
-		KeyBy(func(d testItem) int { return d.ID }).
-		ParentBy(func(d testItem) int { return d.ParentID }).
+		KeyBy(func(d testItem) any { return d.ID }).
+		ParentBy(func(d testItem) any { return d.ParentID }).
 		SortBy(func(d testItem) int { return d.Sort }).
 		WithItems(newItems())
 	roots, nodeMap, _ := b.Build()
@@ -534,7 +534,7 @@ func TestKeyByAfterWithItems(t *testing.T) {
 }
 
 func TestDuplicateKey(t *testing.T) {
-	_, err := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems([]testItem{
+	_, _, err := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems([]testItem{
 		{ID: 1, ParentID: 1},
 		{ID: 1, ParentID: 1},
 	}).Build()
@@ -544,19 +544,19 @@ func TestDuplicateKey(t *testing.T) {
 }
 
 func TestAddItemDuplicateKey(t *testing.T) {
-	b := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems([]testItem{{ID: 1, ParentID: 1}})
-	_, err := b.AddItem(testItem{ID: 1, ParentID: 1}).Build()
+	b := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems([]testItem{{ID: 1, ParentID: 1}})
+	_, _, err := b.AddItem(testItem{ID: 1, ParentID: 1}).Build()
 	if err == nil {
 		t.Error("expected error on duplicate key")
 	}
 }
 
 func TestMap(t *testing.T) {
-	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).
+	_, nodeMap, _ := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).
 		Map(func(d testItem) testItem {
 			d.Name = strings.ToUpper(d.Name)
 			return d
-		}, func(d testItem) int { return d.ID }).
+		}, func(d testItem) any { return d.ID }).
 		Build()
 
 	for _, n := range nodeMap {
@@ -567,8 +567,8 @@ func TestMap(t *testing.T) {
 }
 
 func TestMapPreservesTreeStructure(t *testing.T) {
-	b := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems())
-	mapped := b.Map(func(d testItem) testItem { return d }, func(d testItem) int { return d.ID })
+	b := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems())
+	mapped := b.Map(func(d testItem) testItem { return d }, func(d testItem) any { return d.ID })
 	roots, nodeMap, _ := mapped.Build()
 
 	if len(roots) != 1 {
@@ -583,7 +583,7 @@ func TestMapPreservesTreeStructure(t *testing.T) {
 }
 
 func TestFind(t *testing.T) {
-	b := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems())
+	b := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems())
 	node := b.Find(func(d testItem) bool { return d.Name == "child-A" })
 	if node == nil {
 		t.Fatal("Find returned nil")
@@ -594,7 +594,7 @@ func TestFind(t *testing.T) {
 }
 
 func TestFindNotFound(t *testing.T) {
-	b := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems())
+	b := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems())
 	node := b.Find(func(d testItem) bool { return d.Name == "nonexistent" })
 	if node != nil {
 		t.Error("Find should return nil for non-matching predicate")
@@ -602,7 +602,7 @@ func TestFindNotFound(t *testing.T) {
 }
 
 func TestContains(t *testing.T) {
-	b := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems())
+	b := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems())
 	if !b.Contains(1) {
 		t.Error("Contains(1) should return true")
 	}
@@ -615,7 +615,7 @@ func TestContains(t *testing.T) {
 }
 
 func TestDepth(t *testing.T) {
-	b := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems())
+	b := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems())
 	if b.Depth(1) != 1 {
 		t.Errorf("root depth should be 1, got %d", b.Depth(1))
 	}
@@ -631,8 +631,8 @@ func TestDepth(t *testing.T) {
 }
 
 func TestMapPreservesOverrides(t *testing.T) {
-	original := newBuilder().KeyBy(func(d testItem) int { return d.ID }).WithItems(newItems()).MoveItem(5, 2)
-	mapped := original.Map(func(d testItem) testItem { return d }, func(d testItem) int { return d.ID })
+	original := newBuilder().KeyBy(func(d testItem) any { return d.ID }).WithItems(newItems()).MoveItem(5, 2)
+	mapped := original.Map(func(d testItem) testItem { return d }, func(d testItem) any { return d.ID })
 
 	_, origMap, _ := original.Build()
 	_, mapMap, _ := mapped.Build()
