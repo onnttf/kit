@@ -115,26 +115,26 @@ func LessThanOrEqual(column string, value any) func(db *gorm.DB) *gorm.DB {
 	}
 }
 
-// In returns a scope function that filters a query by column IN (values...).
+// In returns a scope function that filters a query by column IN (values).
 // The column name is quoted to prevent SQL injection.
 //
 // Example:
 //
-//	db.Scopes(In("status", "active", "pending")).Find(&users)
-//	db.Scopes(In("id", []int{1, 2, 3}...)).Find(&users)
-func In(column string, values ...any) func(db *gorm.DB) *gorm.DB {
+//	db.Scopes(In("id", []any{1, 2, 3})).Find(&users)
+//	db.Scopes(In("status", []any{"active", "pending"})).Find(&users)
+func In(column string, values any) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" IN ?", values)
 	}
 }
 
-// NotIn returns a scope function that filters a query by column NOT IN (values...).
+// NotIn returns a scope function that filters a query by column NOT IN (values).
 // The column name is quoted to prevent SQL injection.
 //
 // Example:
 //
-//	db.Scopes(NotIn("status", "deleted")).Find(&users)
-func NotIn(column string, values ...any) func(db *gorm.DB) *gorm.DB {
+//	db.Scopes(NotIn("status", []any{"deleted"})).Find(&users)
+func NotIn(column string, values any) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" NOT IN ?", values)
 	}
