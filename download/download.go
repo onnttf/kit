@@ -28,7 +28,12 @@ var (
 
 func getDefaultClient() *http.Client {
 	defaultClientOnce.Do(func() {
-		defaultClient = &http.Client{Timeout: 30 * time.Second}
+		defaultClient = &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConnsPerHost: 100,
+			},
+		}
 	})
 	return defaultClient
 }
