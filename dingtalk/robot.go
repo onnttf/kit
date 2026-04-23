@@ -16,12 +16,19 @@ import (
 	"time"
 )
 
-var defaultClientOnce sync.Once
-var defaultClient *http.Client
+var (
+	defaultClientOnce sync.Once
+	defaultClient     *http.Client
+)
 
 func getDefaultClient() *http.Client {
 	defaultClientOnce.Do(func() {
-		defaultClient = &http.Client{Timeout: 5 * time.Second}
+		defaultClient = &http.Client{
+			Timeout: 5 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConnsPerHost: 100,
+			},
+		}
 	})
 	return defaultClient
 }
