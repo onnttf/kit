@@ -2,6 +2,14 @@ package dingtalk
 
 import "encoding/json"
 
+var (
+	_ Message = (*TextMsg)(nil)
+	_ Message = (*MarkdownMsg)(nil)
+	_ Message = (*LinkMsg)(nil)
+	_ Message = (*ActionCardMsg)(nil)
+	_ Message = (*FeedCardMsg)(nil)
+)
+
 const (
 	MsgTypeText       = "text"
 	MsgTypeMarkdown   = "markdown"
