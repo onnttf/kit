@@ -6,22 +6,13 @@ import (
 )
 
 // ConstantBackoff returns a BackoffFunc with constant delay.
-//
-// Example:
-//
-//	concurrent.ConstantBackoff(100 * time.Millisecond)
 func ConstantBackoff(delay time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		return delay
 	}
 }
 
-// LinearBackoff returns a BackoffFunc with linear increase.
-// delay = base * attempt
-//
-// Example:
-//
-//	concurrent.LinearBackoff(100 * time.Millisecond)(3)
+// LinearBackoff returns a BackoffFunc with linear increase: delay = base * attempt.
 func LinearBackoff(base time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		return base * time.Duration(attempt)
@@ -29,12 +20,8 @@ func LinearBackoff(base time.Duration) BackoffFunc {
 }
 
 // ExponentialBackoff returns a BackoffFunc with exponential increase.
-// delay = base * (2 ^ (attempt - 1))
+// delay = base * (2 ^ (attempt - 1)).
 // The max parameter caps the maximum delay.
-//
-// Example:
-//
-//	concurrent.ExponentialBackoff(100*time.Millisecond, time.Second)(3)
 func ExponentialBackoff(base time.Duration, max time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		if attempt <= 0 {
@@ -54,12 +41,8 @@ func ExponentialBackoff(base time.Duration, max time.Duration) BackoffFunc {
 }
 
 // FibonacciBackoff returns a BackoffFunc using Fibonacci sequence.
-// delay = base * fibonacci(attempt)
+// delay = base * fibonacci(attempt).
 // The max parameter caps the maximum delay.
-//
-// Example:
-//
-//	concurrent.FibonacciBackoff(100*time.Millisecond, time.Second)(5)
 func FibonacciBackoff(base time.Duration, max time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		if attempt <= 0 {

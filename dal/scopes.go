@@ -21,10 +21,6 @@ const (
 )
 
 // Paginate returns a scope function that applies pagination to a query.
-//
-// Example:
-//
-//	db.Scopes(Paginate(1, 20)).Find(&users) // page 1, 20 items per page
 func Paginate(page, pageSize int) func(db *gorm.DB) *gorm.DB {
 	if page <= 0 {
 		page = 1
@@ -44,11 +40,6 @@ func Paginate(page, pageSize int) func(db *gorm.DB) *gorm.DB {
 }
 
 // Equal returns a scope function that filters a query by column = value.
-// The column name is quoted to prevent SQL injection.
-//
-// Example:
-//
-//	db.Scopes(Equal("user_id", 123)).Find(&users)
 func Equal(column string, value any) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" = ?", value)
@@ -56,11 +47,6 @@ func Equal(column string, value any) func(db *gorm.DB) *gorm.DB {
 }
 
 // NotEqual returns a scope function that filters a query by column != value.
-// The column name is quoted to prevent SQL injection.
-//
-// Example:
-//
-//	db.Scopes(NotEqual("status", "deleted")).Find(&users)
 func NotEqual(column string, value any) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" != ?", value)
@@ -68,11 +54,6 @@ func NotEqual(column string, value any) func(db *gorm.DB) *gorm.DB {
 }
 
 // GreaterThan returns a scope function that filters a query by column > value.
-// The column name is quoted to prevent SQL injection.
-//
-// Example:
-//
-//	db.Scopes(GreaterThan("price", 100)).Find(&products)
 func GreaterThan(column string, value any) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" > ?", value)
@@ -80,11 +61,6 @@ func GreaterThan(column string, value any) func(db *gorm.DB) *gorm.DB {
 }
 
 // LessThan returns a scope function that filters a query by column < value.
-// The column name is quoted to prevent SQL injection.
-//
-// Example:
-//
-//	db.Scopes(LessThan("price", 100)).Find(&products)
 func LessThan(column string, value any) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" < ?", value)
@@ -92,11 +68,6 @@ func LessThan(column string, value any) func(db *gorm.DB) *gorm.DB {
 }
 
 // GreaterThanOrEqual returns a scope function that filters a query by column >= value.
-// The column name is quoted to prevent SQL injection.
-//
-// Example:
-//
-//	db.Scopes(GreaterThanOrEqual("price", 100)).Find(&products)
 func GreaterThanOrEqual(column string, value any) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" >= ?", value)
@@ -104,11 +75,6 @@ func GreaterThanOrEqual(column string, value any) func(db *gorm.DB) *gorm.DB {
 }
 
 // LessThanOrEqual returns a scope function that filters a query by column <= value.
-// The column name is quoted to prevent SQL injection.
-//
-// Example:
-//
-//	db.Scopes(LessThanOrEqual("price", 100)).Find(&products)
 func LessThanOrEqual(column string, value any) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" <= ?", value)
@@ -116,12 +82,6 @@ func LessThanOrEqual(column string, value any) func(db *gorm.DB) *gorm.DB {
 }
 
 // In returns a scope function that filters a query by column IN (values).
-// The column name is quoted to prevent SQL injection.
-//
-// Example:
-//
-//	db.Scopes(In("id", []any{1, 2, 3})).Find(&users)
-//	db.Scopes(In("status", []any{"active", "pending"})).Find(&users)
 func In(column string, values any) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" IN ?", values)
@@ -129,11 +89,6 @@ func In(column string, values any) func(db *gorm.DB) *gorm.DB {
 }
 
 // NotIn returns a scope function that filters a query by column NOT IN (values).
-// The column name is quoted to prevent SQL injection.
-//
-// Example:
-//
-//	db.Scopes(NotIn("status", []any{"deleted"})).Find(&users)
 func NotIn(column string, values any) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" NOT IN ?", values)
@@ -141,11 +96,6 @@ func NotIn(column string, values any) func(db *gorm.DB) *gorm.DB {
 }
 
 // Between returns a scope function that filters a query by column BETWEEN min AND max.
-// The column name is quoted to prevent SQL injection.
-//
-// Example:
-//
-//	db.Scopes(Between("price", 100, 200)).Find(&products)
 func Between(column string, min, max any) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" BETWEEN ? AND ?", min, max)
@@ -153,11 +103,6 @@ func Between(column string, min, max any) func(db *gorm.DB) *gorm.DB {
 }
 
 // NotBetween returns a scope function that filters a query by column NOT BETWEEN min AND max.
-// The column name is quoted to prevent SQL injection.
-//
-// Example:
-//
-//	db.Scopes(NotBetween("price", 100, 200)).Find(&products)
 func NotBetween(column string, min, max any) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" NOT BETWEEN ? AND ?", min, max)
@@ -165,10 +110,6 @@ func NotBetween(column string, min, max any) func(db *gorm.DB) *gorm.DB {
 }
 
 // IsNull returns a scope function that filters a query by column IS NULL.
-//
-// Example:
-//
-//	db.Scopes(IsNull("deleted_at")).Find(&users)
 func IsNull(column string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column) + " IS NULL")
@@ -176,10 +117,6 @@ func IsNull(column string) func(db *gorm.DB) *gorm.DB {
 }
 
 // IsNotNull returns a scope function that filters a query by column IS NOT NULL.
-//
-// Example:
-//
-//	db.Scopes(IsNotNull("deleted_at")).Find(&users)
 func IsNotNull(column string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column) + " IS NOT NULL")
@@ -187,27 +124,18 @@ func IsNotNull(column string) func(db *gorm.DB) *gorm.DB {
 }
 
 // OrderBy returns a scope function that sorts query results.
-// The direction must be "asc" or "desc" (case-insensitive).
 // The field name is quoted to prevent SQL injection.
-//
-// Example:
-//
-//	db.Scopes(OrderBy("created_at", "desc")).Find(&users)
 func OrderBy(field, direction string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		dir := "ASC"
+		sortDirection := "ASC"
 		if strings.ToLower(direction) == "desc" {
-			dir = "DESC"
+			sortDirection = "DESC"
 		}
-		return db.Order(db.Statement.Quote(field) + " " + dir)
+		return db.Order(db.Statement.Quote(field) + " " + sortDirection)
 	}
 }
 
 // Limit returns a scope function that limits the number of records returned.
-//
-// Example:
-//
-//	db.Scopes(Limit(10)).Find(&users)
 func Limit(limit int) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Limit(limit)
@@ -216,11 +144,6 @@ func Limit(limit int) func(db *gorm.DB) *gorm.DB {
 
 // Like returns a scope function that filters a query using a LIKE clause.
 // Wildcards (%, _, \) in value are escaped so they are matched literally.
-// The column name is quoted to prevent SQL injection.
-//
-// Example:
-//
-//	db.Scopes(Like("name", "john")).Find(&users) // WHERE name LIKE '%john%'
 func Like(column, value string) func(db *gorm.DB) *gorm.DB {
 	escaped := escapeLike(value)
 	return func(db *gorm.DB) *gorm.DB {

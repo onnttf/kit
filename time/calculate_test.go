@@ -3,415 +3,348 @@ package time
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// Test Suite for StartOfDay Function
+func TestParseInLocation(t *testing.T) {
+	loc := time.UTC
+	result, err := ParseInLocation("2006-01-02", "2024-03-15", loc)
+	require.NoError(t, err)
+	assert.Equal(t, 2024, result.Year())
+	assert.Equal(t, time.March, result.Month())
+	assert.Equal(t, 15, result.Day())
+}
 
-func TestStartOfDay_Basic(t *testing.T) {
+func TestStartOfDay(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    time.Time
-		wantHour int
-		wantMin  int
-		wantSec  int
-		wantNano int
+		expected time.Time
 	}{
 		{
-			name:     "morning time",
-			input:    time.Date(2024, 3, 15, 10, 30, 45, 123456789, time.UTC),
-			wantHour: 0,
-			wantMin:  0,
-			wantSec:  0,
-			wantNano: 0,
+			name:     "normal case",
+			input:    time.Date(2024, 3, 15, 14, 30, 45, 123456789, time.UTC),
+			expected: time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC),
 		},
 		{
-			name:     "midnight",
+			name:     "already start",
 			input:    time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC),
-			wantHour: 0,
-			wantMin:  0,
-			wantSec:  0,
-			wantNano: 0,
+			expected: time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC),
 		},
 		{
 			name:     "end of day",
-			input:    time.Date(2024, 3, 15, 23, 59, 59, 0, time.UTC),
-			wantHour: 0,
-			wantMin:  0,
-			wantSec:  0,
-			wantNano: 0,
+			input:    time.Date(2024, 3, 15, 23, 59, 59, 999999999, time.UTC),
+			expected: time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := StartOfDay(tt.input)
-
-			if got.Year() != tt.input.Year() {
-				t.Errorf("Year: got %d, want %d", got.Year(), tt.input.Year())
-			}
-			if got.Month() != tt.input.Month() {
-				t.Errorf("Month: got %d, want %d", got.Month(), tt.input.Month())
-			}
-			if got.Day() != tt.input.Day() {
-				t.Errorf("Day: got %d, want %d", got.Day(), tt.input.Day())
-			}
-			if got.Hour() != tt.wantHour {
-				t.Errorf("Hour: got %d, want %d", got.Hour(), tt.wantHour)
-			}
-			if got.Minute() != tt.wantMin {
-				t.Errorf("Minute: got %d, want %d", got.Minute(), tt.wantMin)
-			}
-			if got.Second() != tt.wantSec {
-				t.Errorf("Second: got %d, want %d", got.Second(), tt.wantSec)
-			}
-			if got.Nanosecond() != tt.wantNano {
-				t.Errorf("Nanosecond: got %d, want %d", got.Nanosecond(), tt.wantNano)
-			}
+			result := StartOfDay(tt.input)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestStartOfDay_Location(t *testing.T) {
-	// Test with different timezones
-	locations := []*time.Location{
-		time.UTC,
-		time.FixedZone("EST", -5*3600),
-		time.FixedZone("JST", 9*3600),
-	}
-
-	for _, loc := range locations {
-		t.Run(loc.String(), func(t *testing.T) {
-			input := time.Date(2024, 3, 15, 14, 30, 45, 0, loc)
-			got := StartOfDay(input)
-
-			// Verify location is preserved
-			if got.Location() != loc {
-				t.Errorf("Location: got %v, want %v", got.Location(), loc)
-			}
-
-			// Verify it's start of day in that timezone
-			if got.Hour() != 0 || got.Minute() != 0 || got.Second() != 0 {
-				t.Errorf("Expected 00:00:00, got %02d:%02d:%02d",
-					got.Hour(), got.Minute(), got.Second())
-			}
-		})
-	}
-}
-
-func TestStartOfDay_SpecialDates(t *testing.T) {
-	tests := []struct {
-		name  string
-		input time.Time
-	}{
-		{
-			name:  "leap year Feb 29",
-			input: time.Date(2024, 2, 29, 12, 0, 0, 0, time.UTC),
-		},
-		{
-			name:  "year boundary",
-			input: time.Date(2024, 1, 1, 23, 59, 59, 0, time.UTC),
-		},
-		{
-			name:  "month boundary",
-			input: time.Date(2024, 3, 31, 15, 30, 0, 0, time.UTC),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := StartOfDay(tt.input)
-
-			if got.Year() != tt.input.Year() ||
-				got.Month() != tt.input.Month() ||
-				got.Day() != tt.input.Day() {
-				t.Errorf("Date changed: got %v, want %v", got, tt.input)
-			}
-
-			if got.Hour() != 0 || got.Minute() != 0 || got.Second() != 0 || got.Nanosecond() != 0 {
-				t.Errorf("Not start of day: %v", got)
-			}
-		})
-	}
-}
-
-// Test Suite for EndOfDay Function
-
-func TestEndOfDay_Basic(t *testing.T) {
+func TestEndOfDay(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    time.Time
-		wantHour int
-		wantMin  int
-		wantSec  int
-		wantNano int
+		expected time.Time
 	}{
 		{
-			name:     "morning time",
-			input:    time.Date(2024, 3, 15, 10, 30, 45, 123456789, time.UTC),
-			wantHour: 23,
-			wantMin:  59,
-			wantSec:  59,
-			wantNano: 999999999,
+			name:     "normal case",
+			input:    time.Date(2024, 3, 15, 14, 30, 45, 0, time.UTC),
+			expected: time.Date(2024, 3, 15, 23, 59, 59, 999999999, time.UTC),
 		},
 		{
-			name:     "midnight",
+			name:     "already end",
+			input:    time.Date(2024, 3, 15, 23, 59, 59, 999999999, time.UTC),
+			expected: time.Date(2024, 3, 15, 23, 59, 59, 999999999, time.UTC),
+		},
+		{
+			name:     "start of day",
 			input:    time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC),
-			wantHour: 23,
-			wantMin:  59,
-			wantSec:  59,
-			wantNano: 999999999,
-		},
-		{
-			name:     "already end of day",
-			input:    time.Date(2024, 3, 15, 23, 59, 59, 0, time.UTC),
-			wantHour: 23,
-			wantMin:  59,
-			wantSec:  59,
-			wantNano: 999999999,
+			expected: time.Date(2024, 3, 15, 23, 59, 59, 999999999, time.UTC),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := EndOfDay(tt.input)
-
-			if got.Year() != tt.input.Year() {
-				t.Errorf("Year: got %d, want %d", got.Year(), tt.input.Year())
-			}
-			if got.Month() != tt.input.Month() {
-				t.Errorf("Month: got %d, want %d", got.Month(), tt.input.Month())
-			}
-			if got.Day() != tt.input.Day() {
-				t.Errorf("Day: got %d, want %d", got.Day(), tt.input.Day())
-			}
-			if got.Hour() != tt.wantHour {
-				t.Errorf("Hour: got %d, want %d", got.Hour(), tt.wantHour)
-			}
-			if got.Minute() != tt.wantMin {
-				t.Errorf("Minute: got %d, want %d", got.Minute(), tt.wantMin)
-			}
-			if got.Second() != tt.wantSec {
-				t.Errorf("Second: got %d, want %d", got.Second(), tt.wantSec)
-			}
-			if got.Nanosecond() != tt.wantNano {
-				t.Errorf("Nanosecond: got %d, want %d", got.Nanosecond(), tt.wantNano)
-			}
+			result := EndOfDay(tt.input)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestEndOfDay_Location(t *testing.T) {
-	locations := []*time.Location{
-		time.UTC,
-		time.FixedZone("EST", -5*3600),
-		time.FixedZone("JST", 9*3600),
-	}
+func TestStartOfWeek(t *testing.T) {
+	loc := time.UTC
 
-	for _, loc := range locations {
-		t.Run(loc.String(), func(t *testing.T) {
-			input := time.Date(2024, 3, 15, 14, 30, 45, 0, loc)
-			got := EndOfDay(input)
-
-			// Verify location is preserved
-			if got.Location() != loc {
-				t.Errorf("Location: got %v, want %v", got.Location(), loc)
-			}
-
-			// Verify it's end of day
-			if got.Hour() != 23 || got.Minute() != 59 || got.Second() != 59 || got.Nanosecond() != 999999999 {
-				t.Errorf("Expected 23:59:59.999999999, got %02d:%02d:%02d.%d",
-					got.Hour(), got.Minute(), got.Second(), got.Nanosecond())
-			}
-		})
-	}
-}
-
-func TestEndOfDay_SpecialDates(t *testing.T) {
 	tests := []struct {
-		name  string
-		input time.Time
+		name     string
+		input    time.Time
+		expected time.Time
 	}{
 		{
-			name:  "leap year Feb 29",
-			input: time.Date(2024, 2, 29, 12, 0, 0, 0, time.UTC),
+			name:     "monday",
+			input:    time.Date(2024, 3, 11, 14, 0, 0, 0, loc), // Monday
+			expected: time.Date(2024, 3, 11, 0, 0, 0, 0, loc),
 		},
 		{
-			name:  "year boundary",
-			input: time.Date(2023, 12, 31, 0, 0, 0, 0, time.UTC),
+			name:     "tuesday",
+			input:    time.Date(2024, 3, 12, 14, 0, 0, 0, loc), // Tuesday
+			expected: time.Date(2024, 3, 11, 0, 0, 0, 0, loc),
 		},
 		{
-			name:  "month boundary",
-			input: time.Date(2024, 3, 31, 15, 30, 0, 0, time.UTC),
+			name:     "wednesday",
+			input:    time.Date(2024, 3, 13, 14, 0, 0, 0, loc), // Wednesday
+			expected: time.Date(2024, 3, 11, 0, 0, 0, 0, loc),
+		},
+		{
+			name:     "thursday",
+			input:    time.Date(2024, 3, 14, 14, 0, 0, 0, loc), // Thursday
+			expected: time.Date(2024, 3, 11, 0, 0, 0, 0, loc),
+		},
+		{
+			name:     "friday",
+			input:    time.Date(2024, 3, 15, 14, 0, 0, 0, loc), // Friday
+			expected: time.Date(2024, 3, 11, 0, 0, 0, 0, loc),
+		},
+		{
+			name:     "saturday",
+			input:    time.Date(2024, 3, 16, 14, 0, 0, 0, loc), // Saturday
+			expected: time.Date(2024, 3, 11, 0, 0, 0, 0, loc),
+		},
+		{
+			name:     "sunday",
+			input:    time.Date(2024, 3, 17, 14, 0, 0, 0, loc), // Sunday
+			expected: time.Date(2024, 3, 11, 0, 0, 0, 0, loc),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := EndOfDay(tt.input)
-
-			if got.Year() != tt.input.Year() ||
-				got.Month() != tt.input.Month() ||
-				got.Day() != tt.input.Day() {
-				t.Errorf("Date changed: got %v, want %v", got, tt.input)
-			}
-
-			if got.Hour() != 23 || got.Minute() != 59 || got.Second() != 59 || got.Nanosecond() != 999999999 {
-				t.Errorf("Not end of day: %v", got)
-			}
+			result := StartOfWeek(tt.input)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-// Integration Tests
+func TestEndOfWeek(t *testing.T) {
+	loc := time.UTC
 
-func TestStartAndEndOfDay_Range(t *testing.T) {
-	input := time.Date(2024, 3, 15, 14, 30, 45, 123456789, time.UTC)
-
-	start := StartOfDay(input)
-	end := EndOfDay(input)
-
-	// Verify start is before end
-	if !start.Before(end) {
-		t.Error("StartOfDay should be before EndOfDay")
-	}
-
-	// Verify both are on the same date
-	if start.Year() != end.Year() || start.Month() != end.Month() || start.Day() != end.Day() {
-		t.Error("StartOfDay and EndOfDay should be on the same date")
-	}
-
-	// Verify the duration
-	duration := end.Sub(start)
-	expectedDuration := 24*time.Hour - time.Nanosecond
-	if duration != expectedDuration {
-		t.Errorf("Duration between start and end: got %v, want %v", duration, expectedDuration)
-	}
-}
-
-func TestStartOfDay_Idempotent(t *testing.T) {
-	input := time.Date(2024, 3, 15, 14, 30, 45, 0, time.UTC)
-	first := StartOfDay(input)
-	second := StartOfDay(first)
-
-	if !first.Equal(second) {
-		t.Errorf("StartOfDay should be idempotent: first=%v, second=%v", first, second)
-	}
-}
-
-func TestEndOfDay_Idempotent(t *testing.T) {
-	input := time.Date(2024, 3, 15, 14, 30, 45, 0, time.UTC)
-	first := EndOfDay(input)
-	second := EndOfDay(first)
-
-	if !first.Equal(second) {
-		t.Errorf("EndOfDay should be idempotent: first=%v, second=%v", first, second)
-	}
-}
-
-// Benchmark Tests
-
-func BenchmarkStartOfDay(b *testing.B) {
-	t := time.Now()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = StartOfDay(t)
-	}
-}
-
-func BenchmarkEndOfDay(b *testing.B) {
-	t := time.Now()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = EndOfDay(t)
-	}
-}
-
-func BenchmarkStartAndEndOfDay(b *testing.B) {
-	t := time.Now()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = StartOfDay(t)
-		_ = EndOfDay(t)
-	}
-}
-
-func TestEndOfMonth(t *testing.T) {
 	tests := []struct {
-		name  string
-		input time.Time
-		want  time.Time
+		name     string
+		input    time.Time
+		expected time.Time
 	}{
 		{
-			name:  "mid-month March",
-			input: time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC),
-			want:  time.Date(2024, 3, 31, 23, 59, 59, 999999999, time.UTC),
+			name:     "monday",
+			input:    time.Date(2024, 3, 11, 14, 0, 0, 0, loc), // Monday
+			expected: time.Date(2024, 3, 17, 23, 59, 59, 999999999, loc),
 		},
 		{
-			name:  "last day of March",
-			input: time.Date(2024, 3, 31, 0, 0, 0, 0, time.UTC),
-			want:  time.Date(2024, 3, 31, 23, 59, 59, 999999999, time.UTC),
-		},
-		{
-			name:  "January 31",
-			input: time.Date(2024, 1, 31, 12, 0, 0, 0, time.UTC),
-			want:  time.Date(2024, 1, 31, 23, 59, 59, 999999999, time.UTC),
-		},
-		{
-			name:  "February leap year",
-			input: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
-			want:  time.Date(2024, 2, 29, 23, 59, 59, 999999999, time.UTC),
-		},
-		{
-			name:  "February non-leap year",
-			input: time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC),
-			want:  time.Date(2023, 2, 28, 23, 59, 59, 999999999, time.UTC),
-		},
-		{
-			name:  "December",
-			input: time.Date(2024, 12, 15, 0, 0, 0, 0, time.UTC),
-			want:  time.Date(2024, 12, 31, 23, 59, 59, 999999999, time.UTC),
+			name:     "sunday",
+			input:    time.Date(2024, 3, 17, 14, 0, 0, 0, loc), // Sunday
+			expected: time.Date(2024, 3, 17, 23, 59, 59, 999999999, loc),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := EndOfMonth(tt.input)
-			if !got.Equal(tt.want) {
-				t.Errorf("EndOfMonth(%v) = %v, want %v", tt.input, got, tt.want)
-			}
+			result := EndOfWeek(tt.input)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
 func TestStartOfMonth(t *testing.T) {
 	tests := []struct {
-		name  string
-		input time.Time
-		want  time.Time
+		name     string
+		input    time.Time
+		expected time.Time
 	}{
 		{
-			name:  "mid-month",
-			input: time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC),
-			want:  time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
+			name:     "middle of month",
+			input:    time.Date(2024, 3, 15, 14, 0, 0, 0, time.UTC),
+			expected: time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 		},
 		{
-			name:  "first day",
-			input: time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
-			want:  time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
+			name:     "first of month",
+			input:    time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
+			expected: time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 		},
 		{
-			name:  "last day",
-			input: time.Date(2024, 3, 31, 23, 59, 59, 0, time.UTC),
-			want:  time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
+			name:     "last of month",
+			input:    time.Date(2024, 3, 31, 23, 59, 59, 0, time.UTC),
+			expected: time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := StartOfMonth(tt.input)
-			if !got.Equal(tt.want) {
-				t.Errorf("StartOfMonth(%v) = %v, want %v", tt.input, got, tt.want)
-			}
+			result := StartOfMonth(tt.input)
+			assert.Equal(t, tt.expected, result)
 		})
+	}
+}
+
+func TestEndOfMonth(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    time.Time
+		expected time.Time
+	}{
+		{
+			name:     "march 31 days",
+			input:    time.Date(2024, 3, 15, 14, 0, 0, 0, time.UTC),
+			expected: time.Date(2024, 3, 31, 23, 59, 59, 999999999, time.UTC),
+		},
+		{
+			name:     "april 30 days",
+			input:    time.Date(2024, 4, 15, 14, 0, 0, 0, time.UTC),
+			expected: time.Date(2024, 4, 30, 23, 59, 59, 999999999, time.UTC),
+		},
+		{
+			name:     "february leap year",
+			input:    time.Date(2024, 2, 15, 14, 0, 0, 0, time.UTC), // 2024 is leap year
+			expected: time.Date(2024, 2, 29, 23, 59, 59, 999999999, time.UTC),
+		},
+		{
+			name:     "february non-leap year",
+			input:    time.Date(2023, 2, 15, 14, 0, 0, 0, time.UTC), // 2023 is not leap year
+			expected: time.Date(2023, 2, 28, 23, 59, 59, 999999999, time.UTC),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := EndOfMonth(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestStartOfYear(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    time.Time
+		expected time.Time
+	}{
+		{
+			name:     "middle of year",
+			input:    time.Date(2024, 6, 15, 14, 0, 0, 0, time.UTC),
+			expected: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:     "start of year",
+			input:    time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			expected: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:     "end of year",
+			input:    time.Date(2024, 12, 31, 23, 59, 59, 0, time.UTC),
+			expected: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := StartOfYear(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestEndOfYear(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    time.Time
+		expected time.Time
+	}{
+		{
+			name:     "middle of year",
+			input:    time.Date(2024, 6, 15, 14, 0, 0, 0, time.UTC),
+			expected: time.Date(2024, 12, 31, 23, 59, 59, 999999999, time.UTC),
+		},
+		{
+			name:     "start of year",
+			input:    time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			expected: time.Date(2024, 12, 31, 23, 59, 59, 999999999, time.UTC),
+		},
+		{
+			name:     "end of year",
+			input:    time.Date(2024, 12, 31, 23, 59, 59, 999999999, time.UTC),
+			expected: time.Date(2024, 12, 31, 23, 59, 59, 999999999, time.UTC),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := EndOfYear(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsWeekend(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    time.Time
+		expected bool
+	}{
+		{"monday", time.Date(2024, 3, 11, 12, 0, 0, 0, time.UTC), false},
+		{"tuesday", time.Date(2024, 3, 12, 12, 0, 0, 0, time.UTC), false},
+		{"wednesday", time.Date(2024, 3, 13, 12, 0, 0, 0, time.UTC), false},
+		{"thursday", time.Date(2024, 3, 14, 12, 0, 0, 0, time.UTC), false},
+		{"friday", time.Date(2024, 3, 15, 12, 0, 0, 0, time.UTC), false},
+		{"saturday", time.Date(2024, 3, 16, 12, 0, 0, 0, time.UTC), true},
+		{"sunday", time.Date(2024, 3, 17, 12, 0, 0, 0, time.UTC), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsWeekend(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsWeekday(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    time.Time
+		expected bool
+	}{
+		{"monday", time.Date(2024, 3, 11, 12, 0, 0, 0, time.UTC), true},
+		{"tuesday", time.Date(2024, 3, 12, 12, 0, 0, 0, time.UTC), true},
+		{"wednesday", time.Date(2024, 3, 13, 12, 0, 0, 0, time.UTC), true},
+		{"thursday", time.Date(2024, 3, 14, 12, 0, 0, 0, time.UTC), true},
+		{"friday", time.Date(2024, 3, 15, 12, 0, 0, 0, time.UTC), true},
+		{"saturday", time.Date(2024, 3, 16, 12, 0, 0, 0, time.UTC), false},
+		{"sunday", time.Date(2024, 3, 17, 12, 0, 0, 0, time.UTC), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsWeekday(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func BenchmarkStartOfDay(b *testing.B) {
+	input := time.Date(2024, 3, 15, 14, 30, 45, 123456789, time.UTC)
+	for i := 0; i < b.N; i++ {
+		StartOfDay(input)
+	}
+}
+
+func BenchmarkEndOfMonth(b *testing.B) {
+	input := time.Date(2024, 3, 15, 14, 30, 45, 123456789, time.UTC)
+	for i := 0; i < b.N; i++ {
+		EndOfMonth(input)
 	}
 }

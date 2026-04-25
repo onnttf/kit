@@ -12,26 +12,19 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
+
+	"sync"
 )
 
-var (
-	defaultClientOnce sync.Once
-	defaultClient     *http.Client
-)
-
-func getDefaultClient() *http.Client {
-	defaultClientOnce.Do(func() {
-		defaultClient = &http.Client{
-			Timeout: 5 * time.Second,
-			Transport: &http.Transport{
-				MaxIdleConnsPerHost: 100,
-			},
-		}
-	})
-	return defaultClient
-}
+var getDefaultClient = sync.OnceValue(func() *http.Client {
+	return &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConnsPerHost: 100,
+		},
+	}
+})
 
 // Robot is the client for sending messages to DingTalk.
 type Robot struct {
@@ -41,29 +34,17 @@ type Robot struct {
 }
 
 // NewRobot creates a Robot instance with the given access token.
-//
-// Example:
-//
-//	robot := dingtalk.NewRobot("your-access-token")
 func NewRobot(accessToken string) *Robot {
 	return &Robot{accessToken: accessToken, httpClient: getDefaultClient()}
 }
 
 // WithSecret sets the secret for signature verification.
-//
-// Example:
-//
-//	robot := dingtalk.NewRobot("token").WithSecret("SEC...")
 func (r *Robot) WithSecret(secret string) *Robot {
 	r.secret = secret
 	return r
 }
 
 // WithClient sets a custom HTTP client.
-//
-// Example:
-//
-//	robot := dingtalk.NewRobot("token").WithClient(&http.Client{Timeout: 10*time.Second})
 func (r *Robot) WithClient(client *http.Client) *Robot {
 	if client != nil {
 		r.httpClient = client
@@ -73,10 +54,6 @@ func (r *Robot) WithClient(client *http.Client) *Robot {
 
 // Send posts the message payload to DingTalk using a default context with 5 second timeout.
 // For custom timeout or cancellation control, use SendWithContext instead.
-//
-// Example:
-//
-//	robot.Send(dingtalk.NewTextMsg("Hello"))
 func (r *Robot) Send(msg Message) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -85,12 +62,6 @@ func (r *Robot) Send(msg Message) error {
 
 // SendWithContext posts the message payload to DingTalk.
 // The context controls the entire HTTP request lifecycle.
-//
-// Example:
-//
-//	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-//	defer cancel()
-//	err := robot.SendWithContext(ctx, msg)
 func (r *Robot) SendWithContext(ctx context.Context, msg Message) error {
 	if r.accessToken == "" {
 		return errors.New("access token is empty")

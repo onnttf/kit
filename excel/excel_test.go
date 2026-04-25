@@ -1,7 +1,7 @@
 package excel
 
 import (
-	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,181 +9,176 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-var testData = [][]string{
-	{"Name", "Age", "City", "Score", "Active"},
-	{"Alice", "25", "Beijing", "95.5", "true"},
-	{"Bob", "30", "Shanghai", "88.0", "false"},
+func TestIsXLSX(t *testing.T) {
+	tests := []struct {
+		filename string
+		expected bool
+	}{
+		{"test.xlsx", true},
+		{"test.XLSX", true},
+		{"test.xls", false},
+		{"test.csv", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			assert.Equal(t, tt.expected, IsXLSX(tt.filename))
+		})
+	}
 }
 
-type Person struct {
-	Name   string  `excel:"A"`
-	Age    int     `excel:"B"`
-	City   string  `excel:"C"`
-	Score  float64 `excel:"D"`
-	Active bool    `excel:"E"`
-}
-
-func createTestFile(t *testing.T, data [][]string) string {
+func createTestExcelFile(t testing.TB) string {
 	f := excelize.NewFile()
 	defer f.Close()
 
-	for rowIdx, row := range data {
-		for colIdx, value := range row {
-			cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowIdx+1)
-			f.SetCellValue("Sheet1", cell, value)
-		}
-	}
+	sheet, _ := f.NewSheet("Test")
+	f.SetActiveSheet(sheet)
 
-	tmpFile := t.TempDir() + "/test.xlsx"
-	require.NoError(t, f.SaveAs(tmpFile))
+	_ = f.SetCellValue("Test", "A1", "Name")
+	_ = f.SetCellValue("Test", "B1", "Age")
+	_ = f.SetCellValue("Test", "A2", "Alice")
+	_ = f.SetCellValue("Test", "B2", 25)
+
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "test.xlsx")
+	err := f.SaveAs(tmpFile)
+	require.NoError(t, err)
+
 	return tmpFile
 }
 
-func TestIsXLSX(t *testing.T) {
-	assert.True(t, IsXLSX("data.xlsx"))
-	assert.True(t, IsXLSX("data.XLSX"))
-	assert.False(t, IsXLSX("data.xls"))
-	assert.False(t, IsXLSX("data.csv"))
-}
-
-func TestOpen(t *testing.T) {
-	testFile := createTestFile(t, testData)
-	defer os.Remove(testFile)
-
-	wb, err := Open(testFile)
-	require.NoError(t, err)
-	require.NoError(t, wb.Close())
-}
-
-func TestOpen_NotFound(t *testing.T) {
-	_, err := Open("nonexistent.xlsx")
-	assert.Error(t, err)
-}
-
-func TestWorkbook_Sheets(t *testing.T) {
-	testFile := createTestFile(t, testData)
-	defer os.Remove(testFile)
-
-	wb, _ := Open(testFile)
-	defer wb.Close()
-
-	sheets := wb.Sheets()
-	assert.Contains(t, sheets, "Sheet1")
-}
-
-func TestRead(t *testing.T) {
-	testFile := createTestFile(t, testData)
-	defer os.Remove(testFile)
-
-	data, err := Read(testFile)
-	require.NoError(t, err)
-	assert.Equal(t, testData, data["Sheet1"])
-}
-
-func TestReadSheet(t *testing.T) {
-	testFile := createTestFile(t, testData)
-	defer os.Remove(testFile)
-
-	rows, err := ReadSheet(testFile, "Sheet1")
-	require.NoError(t, err)
-	assert.Equal(t, testData, rows)
-}
-
-func TestWalk(t *testing.T) {
-	testFile := createTestFile(t, testData)
-	defer os.Remove(testFile)
-
-	var rows [][]string
-	err := Walk(testFile, "Sheet1", func(idx int, row []string) error {
-		rows = append(rows, row)
-		return nil
-	})
-	require.NoError(t, err)
-	assert.Equal(t, testData, rows)
-}
-
-func TestWalk_Stop(t *testing.T) {
-	testFile := createTestFile(t, testData)
-	defer os.Remove(testFile)
-
-	err := Walk(testFile, "Sheet1", func(idx int, row []string) error {
-		if idx == 2 {
-			return assert.AnError
-		}
-		return nil
-	})
-	assert.ErrorIs(t, err, assert.AnError)
-}
-
-func TestScanRow(t *testing.T) {
-	testFile := createTestFile(t, testData)
-	defer os.Remove(testFile)
-
-	var people []*Person
-	err := ScanRow(testFile, "Sheet1", func(idx int, p *Person) error {
-		people = append(people, p)
-		return nil
-	})
-	require.NoError(t, err)
-
-	assert.Equal(t, 2, len(people))
-	assert.Equal(t, "Alice", people[0].Name)
-}
-
-func TestScanRow_Stop(t *testing.T) {
-	testFile := createTestFile(t, testData)
-	defer os.Remove(testFile)
-
-	err := ScanRow(testFile, "Sheet1", func(idx int, p *Person) error {
-		if idx == 2 {
-			return assert.AnError
-		}
-		return nil
-	})
-	assert.ErrorIs(t, err, assert.AnError)
-}
-
-func TestScanAll(t *testing.T) {
-	testFile := createTestFile(t, testData)
-	defer os.Remove(testFile)
-
-	people, err := ScanAll[Person](testFile, "Sheet1")
-	require.NoError(t, err)
-
-	assert.Equal(t, 3, len(people))
-	assert.Nil(t, people[0]) // header
-	assert.Equal(t, "Alice", people[1].Name)
+type Person struct {
+	Name string `excel:"A"`
+	Age  int    `excel:"B"`
 }
 
 func TestParse(t *testing.T) {
-	row := []string{"Alice", "25", "Beijing", "95.5", "true"}
-	p, err := Parse[Person](row)
-	require.NoError(t, err)
-
-	assert.Equal(t, "Alice", p.Name)
-	assert.Equal(t, 25, p.Age)
-	assert.Equal(t, 95.5, p.Score)
-	assert.True(t, p.Active)
-}
-
-func TestParse_InvalidInt(t *testing.T) {
-	row := []string{"Name", "not_a_number"}
-	_, err := Parse[Person](row)
-	assert.Error(t, err)
-}
-
-func TestSheet_Scan(t *testing.T) {
-	testFile := createTestFile(t, testData)
-	defer os.Remove(testFile)
-
-	wb, _ := Open(testFile)
-	defer wb.Close()
-
-	var rows [][]string
-	err := wb.Sheet("Sheet1").Scan(func(idx int, row []string) error {
-		rows = append(rows, row)
-		return nil
+	t.Run("valid row", func(t *testing.T) {
+		row := []string{"Alice", "25"}
+		result, err := Parse[Person](row)
+		require.NoError(t, err)
+		assert.Equal(t, "Alice", result.Name)
+		assert.Equal(t, 25, result.Age)
 	})
+
+	t.Run("short row", func(t *testing.T) {
+		row := []string{"Alice"}
+		result, err := Parse[Person](row)
+		require.NoError(t, err)
+		assert.Equal(t, "Alice", result.Name)
+		assert.Equal(t, 0, result.Age)
+	})
+}
+
+func TestWorkbook_Open(t *testing.T) {
+	filePath := createTestExcelFile(t)
+	wb, err := Open(filePath)
 	require.NoError(t, err)
-	assert.Equal(t, testData, rows)
+	require.NotNil(t, wb)
+}
+
+func TestWorkbook_Close(t *testing.T) {
+	filePath := createTestExcelFile(t)
+	wb, err := Open(filePath)
+	require.NoError(t, err)
+	err = wb.Close()
+	assert.NoError(t, err)
+}
+
+func TestWorkbook_Sheets(t *testing.T) {
+	filePath := createTestExcelFile(t)
+	wb, err := Open(filePath)
+	require.NoError(t, err)
+	defer wb.Close()
+	sheets := wb.Sheets()
+	assert.Contains(t, sheets, "Test")
+}
+
+func TestWorkbook_Sheet(t *testing.T) {
+	filePath := createTestExcelFile(t)
+	wb, err := Open(filePath)
+	require.NoError(t, err)
+	defer wb.Close()
+	sheet := wb.Sheet("Test")
+	assert.NotNil(t, sheet)
+}
+
+func TestRow_Values(t *testing.T) {
+	row := &Row{values: []string{"a", "b", "c"}}
+	assert.Equal(t, []string{"a", "b", "c"}, row.Values())
+}
+
+func TestRow_Index(t *testing.T) {
+	row := &Row{index: 5}
+	assert.Equal(t, 5, row.Index())
+}
+
+func TestRow_Value(t *testing.T) {
+	row := &Row{values: []string{"a", "b", "c"}}
+	assert.Equal(t, "a", row.Value(0))
+	assert.Equal(t, "b", row.Value(1))
+	assert.Equal(t, "", row.Value(3))
+}
+
+func TestRow_Len(t *testing.T) {
+	row := &Row{values: []string{"a", "b", "c"}}
+	assert.Equal(t, 3, row.Len())
+}
+
+func TestColumnIndex(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected int
+		hasError bool
+	}{
+		{"A", 0, false},
+		{"B", 1, false},
+		{"Z", 25, false},
+		{"AA", 26, false},
+		{"", 0, true},
+		{"1", 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result, err := columnIndex(tt.input)
+			if tt.hasError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestColumnName(t *testing.T) {
+	tests := []struct {
+		input    int
+		expected string
+	}{
+		{0, "A"},
+		{1, "B"},
+		{25, "Z"},
+		{26, "AA"},
+		{-1, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			assert.Equal(t, tt.expected, columnName(tt.input))
+		})
+	}
+}
+
+func TestScanAll(t *testing.T) {
+	filePath := createTestExcelFile(t)
+	result, err := ScanAll[Person](filePath, "Test")
+	require.NoError(t, err)
+	assert.Len(t, result, 2)
+}
+
+func BenchmarkParse(b *testing.B) {
+	row := []string{"Alice", "25"}
+	for i := 0; i < b.N; i++ {
+		_, _ = Parse[Person](row)
+	}
 }

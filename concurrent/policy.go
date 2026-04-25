@@ -22,10 +22,6 @@ func PanicAsContinue[T any]() PanicPolicy[T] {
 
 // AlwaysContinue returns an ErrorPolicy that always continues.
 // This is the default policy.
-//
-// Example:
-//
-//	config.ErrorPolicy = concurrent.AlwaysContinue[Item]()
 func AlwaysContinue[T any]() ErrorPolicy[T] {
 	return func(err error, item T, attempt int) ErrorAction {
 		return ActionContinue
@@ -33,10 +29,6 @@ func AlwaysContinue[T any]() ErrorPolicy[T] {
 }
 
 // AlwaysRetry returns an ErrorPolicy that always retries.
-//
-// Example:
-//
-//	config.ErrorPolicy = concurrent.AlwaysRetry[Item]()
 func AlwaysRetry[T any]() ErrorPolicy[T] {
 	return func(err error, item T, attempt int) ErrorAction {
 		return ActionRetry
@@ -44,10 +36,6 @@ func AlwaysRetry[T any]() ErrorPolicy[T] {
 }
 
 // RetryOnTimeout returns an ErrorPolicy that retries on timeout.
-//
-// Example:
-//
-//	config.ErrorPolicy = concurrent.RetryOnTimeout[Item]()
 func RetryOnTimeout[T any]() ErrorPolicy[T] {
 	return func(err error, item T, attempt int) ErrorAction {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -58,10 +46,6 @@ func RetryOnTimeout[T any]() ErrorPolicy[T] {
 }
 
 // AbortOnError returns an ErrorPolicy that aborts on any error.
-//
-// Example:
-//
-//	config.ErrorPolicy = concurrent.AbortOnError[Item]()
 func AbortOnError[T any]() ErrorPolicy[T] {
 	return func(err error, item T, attempt int) ErrorAction {
 		return ActionAbort
@@ -70,10 +54,6 @@ func AbortOnError[T any]() ErrorPolicy[T] {
 
 // AbortOnFirstError returns an ErrorPolicy that aborts on the first error.
 // Due to concurrent execution, multiple errors may occur before abort takes effect.
-//
-// Example:
-//
-//	config.ErrorPolicy = concurrent.AbortOnFirstError[Item]()
 func AbortOnFirstError[T any]() ErrorPolicy[T] {
 	var once sync.Once
 	return func(err error, item T, attempt int) ErrorAction {
@@ -89,12 +69,6 @@ func AbortOnFirstError[T any]() ErrorPolicy[T] {
 }
 
 // RetryOnCondition returns an ErrorPolicy that retries based on a condition.
-//
-// Example:
-//
-//	config.ErrorPolicy = concurrent.RetryOnCondition[Item](func(err error) bool {
-//	    return errors.Is(err, context.DeadlineExceeded)
-//	})
 func RetryOnCondition[T any](shouldRetry func(error) bool) ErrorPolicy[T] {
 	return func(err error, item T, attempt int) ErrorAction {
 		if shouldRetry(err) {
@@ -105,12 +79,6 @@ func RetryOnCondition[T any](shouldRetry func(error) bool) ErrorPolicy[T] {
 }
 
 // AbortOnCondition returns an ErrorPolicy that aborts based on a condition.
-//
-// Example:
-//
-//	config.ErrorPolicy = concurrent.AbortOnCondition[Item](func(err error) bool {
-//	    return errors.Is(err, context.DeadlineExceeded)
-//	})
 func AbortOnCondition[T any](shouldAbort func(error) bool) ErrorPolicy[T] {
 	return func(err error, item T, attempt int) ErrorAction {
 		if shouldAbort(err) {
@@ -122,13 +90,6 @@ func AbortOnCondition[T any](shouldAbort func(error) bool) ErrorPolicy[T] {
 
 // CombinePolicies returns an ErrorPolicy that combines multiple policies.
 // It evaluates policies in order and returns the first non-Continue action.
-//
-// Example:
-//
-//	config.ErrorPolicy = concurrent.CombinePolicies[Item](
-//	    concurrent.RetryOnTimeout[Item](),
-//	    concurrent.AbortOnError[Item](),
-//	)
 func CombinePolicies[T any](policies ...ErrorPolicy[T]) ErrorPolicy[T] {
 	return func(err error, item T, attempt int) ErrorAction {
 		for _, policy := range policies {

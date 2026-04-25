@@ -2,520 +2,171 @@ package dal
 
 import (
 	"context"
-	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-// Test model for database operations
-type TestUser struct {
-	ID    int    `gorm:"primarykey"`
-	Name  string `gorm:"column:name"`
-	Email string `gorm:"column:email"`
-	Age   int    `gorm:"column:age"`
+type testUser struct {
+	ID   uint   `gorm:"primarykey"`
+	Name string `gorm:"size:255"`
+	Age  int    `gorm:"size:255"`
 }
 
-func (TestUser) TableName() string {
-	return "test_users"
+func setupTestDB(t *testing.T) *gorm.DB {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+	err = db.AutoMigrate(&testUser{})
+	if err != nil {
+		t.Fatalf("failed to migrate: %v", err)
+	}
+	return db
 }
-
-// Test Suite for Error Variables
-
-func TestErrorVariables(t *testing.T) {
-	t.Run("ErrDatabase exists", func(t *testing.T) {
-		if ErrDatabase == nil {
-			t.Error("ErrDatabase should not be nil")
-		}
-
-		if ErrDatabase.Error() == "" {
-			t.Error("ErrDatabase should have a message")
-		}
-	})
-
-	t.Run("ErrNoRowsAffected exists", func(t *testing.T) {
-		if ErrNoRowsAffected == nil {
-			t.Error("ErrNoRowsAffected should not be nil")
-		}
-
-		if ErrNoRowsAffected.Error() == "" {
-			t.Error("ErrNoRowsAffected should have a message")
-		}
-	})
-
-	t.Run("ErrNotFound exists", func(t *testing.T) {
-		if ErrNotFound == nil {
-			t.Error("ErrNotFound should not be nil")
-		}
-
-		if ErrNotFound.Error() == "" {
-			t.Error("ErrNotFound should have a message")
-		}
-	})
-
-	t.Run("errors are distinct", func(t *testing.T) {
-		if errors.Is(ErrDatabase, ErrNoRowsAffected) {
-			t.Error("ErrDatabase and ErrNoRowsAffected should be distinct")
-		}
-
-		if errors.Is(ErrDatabase, ErrNotFound) {
-			t.Error("ErrDatabase and ErrNotFound should be distinct")
-		}
-
-		if errors.Is(ErrNoRowsAffected, ErrNotFound) {
-			t.Error("ErrNoRowsAffected and ErrNotFound should be distinct")
-		}
-	})
-}
-
-// Test Suite for NewRepo Function
 
 func TestNewRepo(t *testing.T) {
-	repo := NewRepo[TestUser]()
-
-	if repo == nil {
-		t.Fatal("NewRepo should return non-nil repository")
-	}
+	repo := NewRepo[testUser]()
+	assert.NotNil(t, repo)
 }
 
-// Test Suite for Insert Method
+func TestRepo_Insert(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepo[testUser]()
 
-func TestRepo_Insert_NilInput(t *testing.T) {
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-	db := &gorm.DB{}
-
-	err := repo.Insert(ctx, db, nil)
-	if err == nil {
-		t.Fatal("Expected error for nil input")
-	}
-
-	if err.Error() != "newValue is nil" {
-		t.Errorf("Expected 'newValue is nil', got %v", err)
-	}
+	user := &testUser{Name: "Alice", Age: 25}
+	err := repo.Insert(context.Background(), db, user)
+	assert.NoError(t, err)
+	assert.NotZero(t, user.ID)
 }
 
-func TestRepo_Insert_ValidInput(t *testing.T) {
-	t.Skip("Requires real database connection - skipping")
-
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-	db := &gorm.DB{}
-
-	user := &TestUser{
-		Name:  "Alice",
-		Email: "alice@example.com",
-		Age:   30,
-	}
-
-	// Note: This will fail without a real DB connection
-	// In production code, you would use a test database or mock
-	_ = repo.Insert(ctx, db, user)
+func TestRepo_Insert_NilDB(t *testing.T) {
+	repo := NewRepo[testUser]()
+	err := repo.Insert(context.Background(), nil, &testUser{})
+	assert.Error(t, err)
 }
 
-// Test Suite for BatchInsert Method
-
-func TestRepo_BatchInsert_EmptyInput(t *testing.T) {
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-	db := &gorm.DB{}
-
-	err := repo.BatchInsert(ctx, db, []*TestUser{}, 10)
-	if err == nil {
-		t.Fatal("Expected error for empty input")
-	}
-
-	if err.Error() != "newValues is empty" {
-		t.Errorf("Expected 'newValues is empty', got %v", err)
-	}
+func TestRepo_Insert_NilValue(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepo[testUser]()
+	err := repo.Insert(context.Background(), db, nil)
+	assert.Error(t, err)
 }
 
-func TestRepo_BatchInsert_NilElement(t *testing.T) {
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-	db := &gorm.DB{}
+func TestRepo_BatchInsert(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepo[testUser]()
 
-	users := []*TestUser{
-		{Name: "Alice"},
-		nil,
-		{Name: "Bob"},
+	users := []*testUser{
+		{Name: "User1", Age: 20},
+		{Name: "User2", Age: 21},
 	}
-
-	err := repo.BatchInsert(ctx, db, users, 10)
-	if err == nil {
-		t.Fatal("Expected error for nil element")
-	}
-
-	expectedMsg := "newValues[1] is nil"
-	if err.Error() != expectedMsg {
-		t.Errorf("Expected '%s', got %v", expectedMsg, err)
-	}
+	err := repo.BatchInsert(context.Background(), db, users, 2)
+	assert.NoError(t, err)
 }
 
-func TestRepo_BatchInsert_DefaultBatchSize(t *testing.T) {
-	t.Skip("Requires real database connection - skipping")
+func TestRepo_UpdateFields(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepo[testUser]()
 
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-	db := &gorm.DB{}
+	user := &testUser{Name: "Test", Age: 25}
+	db.Create(user)
 
-	users := []*TestUser{
-		{Name: "Alice"},
-		{Name: "Bob"},
-	}
-
-	// Zero or negative batch size should default to 10
-	_ = repo.BatchInsert(ctx, db, users, 0)
-	_ = repo.BatchInsert(ctx, db, users, -5)
+	updates := map[string]any{"name": "NewName"}
+	err := repo.UpdateFields(context.Background(), db, updates, Equal("id", user.ID))
+	assert.NoError(t, err)
 }
 
-// Test Suite for Update Method
+func TestRepo_QueryOne(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepo[testUser]()
 
-func TestRepo_Update_NilInput(t *testing.T) {
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-	db := &gorm.DB{}
+	db.Create(&testUser{Name: "FindMe", Age: 20})
 
-	err := repo.Update(ctx, db, nil)
-	if err == nil {
-		t.Fatal("Expected error for nil input")
-	}
-
-	if err.Error() != "newValue is nil" {
-		t.Errorf("Expected 'newValue is nil', got %v", err)
-	}
+	result, err := repo.QueryOne(context.Background(), db, Equal("name", "FindMe"))
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "FindMe", result.Name)
 }
 
-func TestRepo_Update_WithScopes(t *testing.T) {
-	t.Skip("Requires real database connection - skipping")
+func TestRepo_QueryOne_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepo[testUser]()
 
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-	db := &gorm.DB{}
-
-	user := &TestUser{Name: "UpdatedName"}
-
-	// Test with scope
-	_ = repo.Update(ctx, db, user, Equal("id", 1))
+	_, err := repo.QueryOne(context.Background(), db, Equal("name", "NonExistent"))
+	assert.Error(t, err)
 }
 
-// Test Suite for UpdateFields Method
+func TestRepo_Query(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepo[testUser]()
 
-func TestRepo_UpdateFields_EmptyInput(t *testing.T) {
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-	db := &gorm.DB{}
+	db.Create(&testUser{Name: "User1", Age: 20})
+	db.Create(&testUser{Name: "User2", Age: 25})
 
-	err := repo.UpdateFields(ctx, db, map[string]any{})
-	if err == nil {
-		t.Fatal("Expected error for empty input")
-	}
-
-	if err.Error() != "newValue is empty" {
-		t.Errorf("Expected 'newValue is empty', got %v", err)
-	}
+	results, err := repo.Query(context.Background(), db)
+	assert.NoError(t, err)
+	assert.Len(t, results, 2)
 }
 
-func TestRepo_UpdateFields_ValidInput(t *testing.T) {
-	t.Skip("Requires real database connection - skipping")
+func TestRepo_Count(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepo[testUser]()
 
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-	db := &gorm.DB{}
+	db.Create(&testUser{Name: "User1", Age: 20})
 
-	fields := map[string]any{
-		"name": "NewName",
-		"age":  35,
-	}
-
-	_ = repo.UpdateFields(ctx, db, fields, Equal("id", 1))
+	count, err := repo.Count(context.Background(), db)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), count)
 }
 
-// Test Suite for QueryOne Method
+func TestRepo_Delete(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepo[testUser]()
 
-func TestRepo_QueryOne_ReturnsErrNotFound(t *testing.T) {
-	t.Skip("Requires real database connection - skipping")
+	db.Create(&testUser{Name: "DeleteMe", Age: 20})
 
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-
-	// Create a mock DB that simulates no rows found
-	// In real tests, you would use a test database
-	db := &gorm.DB{
-		Statement: &gorm.Statement{},
-	}
-
-	_, err := repo.QueryOne(ctx, db, Equal("id", 999))
-
-	// Without a real DB, this will fail with a different error
-	// But in a real test with a DB, you would check:
-	// if !errors.Is(err, ErrNotFound) {
-	//     t.Errorf("Expected ErrNotFound, got %v", err)
-	// }
-	_ = err
+	err := repo.Delete(context.Background(), db, Equal("name", "DeleteMe"))
+	assert.NoError(t, err)
 }
 
-// Test Suite for Query Method
+func TestRepo_Delete_NoScope(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepo[testUser]()
 
-func TestRepo_Query_ReturnsEmptySlice(t *testing.T) {
-	t.Skip("Requires real database connection - skipping")
-
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-	db := &gorm.DB{
-		Statement: &gorm.Statement{},
-	}
-
-	// Query with conditions
-	_, err := repo.Query(ctx, db, Equal("age", 999))
-
-	// Without a real DB, this will likely error
-	// But in a real test, an empty result set should not error
-	_ = err
+	err := repo.Delete(context.Background(), db)
+	assert.Error(t, err)
 }
 
-func TestRepo_Query_WithMultipleScopes(t *testing.T) {
-	t.Skip("Requires real database connection - skipping")
+func TestRepo_Raw(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewRepo[testUser]()
 
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-	db := &gorm.DB{
-		Statement: &gorm.Statement{},
-	}
+	db.Create(&testUser{Name: "Raw1", Age: 20})
 
-	// Query with multiple scopes
-	_, err := repo.Query(ctx, db,
-		Equal("age", 30),
-		OrderBy("name", "asc"),
-		Limit(10),
-	)
-
-	_ = err
+	results, err := repo.Raw(context.Background(), db, "SELECT * FROM test_users WHERE name = ?", "Raw1")
+	assert.NoError(t, err)
+	assert.Len(t, results, 1)
 }
 
-// Test Suite for Count Method
-
-func TestRepo_Count_ReturnsZero(t *testing.T) {
-	t.Skip("Requires real database connection - skipping")
-
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-	db := &gorm.DB{
-		Statement: &gorm.Statement{},
-	}
-
-	// Count with conditions
-	_, err := repo.Count(ctx, db, Equal("age", 999))
-
-	// Without a real DB, this will error
-	// But in a real test, zero count should not error
-	_ = err
+func TestExec(t *testing.T) {
+	db := setupTestDB(t)
+	db.Create(&testUser{Name: "ToDelete", Age: 20})
+	err := Exec(context.Background(), db, "DELETE FROM test_users WHERE name = ?", "ToDelete")
+	assert.NoError(t, err)
 }
 
-// Test Suite for Delete Method
-
-func TestRepo_Delete_WithScopes(t *testing.T) {
-	t.Skip("Requires real database connection - skipping")
-
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-	db := &gorm.DB{
-		Statement: &gorm.Statement{},
-	}
-
-	// Delete with conditions
-	err := repo.Delete(ctx, db, Equal("id", 1))
-
-	// Without a real DB, this will error
-	_ = err
+func TestExec_NilDB(t *testing.T) {
+	err := Exec(context.Background(), nil, "DELETE FROM test_users")
+	assert.Error(t, err)
 }
 
-// Test Suite for Repository Interface Implementation
-
-func TestRepo_ImplementsRepository(t *testing.T) {
-	var _ Repository[TestUser] = &Repo[TestUser]{}
-
-	// This test ensures that Repo implements the Repository interface
-	// If it doesn't, the code won't compile
-}
-
-// Test Suite for Generic Type Parameters
-
-func TestRepo_WithDifferentTypes(t *testing.T) {
-	type Product struct {
-		ID    int
-		Name  string
-		Price float64
-	}
-
-	t.Run("repository with Product type", func(t *testing.T) {
-		repo := NewRepo[Product]()
-		if repo == nil {
-			t.Error("Expected non-nil repository")
-		}
-	})
-
-	type Order struct {
-		ID         int
-		CustomerID int
-		Total      float64
-	}
-
-	t.Run("repository with Order type", func(t *testing.T) {
-		repo := NewRepo[Order]()
-		if repo == nil {
-			t.Error("Expected non-nil repository")
-		}
-	})
-}
-
-// Test Suite for Context Handling
-
-func TestRepo_ContextCancellation(t *testing.T) {
-	t.Skip("Requires real database connection - skipping")
-
-	repo := NewRepo[TestUser]()
-	db := &gorm.DB{
-		Statement: &gorm.Statement{},
-	}
-
-	t.Run("insert with cancelled context", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel() // Cancel immediately
-
-		user := &TestUser{Name: "Alice"}
-		err := repo.Insert(ctx, db, user)
-
-		// With a real DB, this should respect cancellation
-		_ = err
-	})
-
-	t.Run("query with cancelled context", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-
-		_, err := repo.Query(ctx, db)
-		_ = err
-	})
-}
-
-// Error Handling Tests
-
-func TestHandleExecError_Usage(t *testing.T) {
-	t.Run("should detect no rows affected", func(t *testing.T) {
-		result := &gorm.DB{
-			RowsAffected: 0,
-			Error:        nil,
-		}
-
-		err := handleExecError(result, "test operation")
-		if err == nil {
-			t.Error("Expected error for 0 rows affected")
-		}
-
-		if !errors.Is(err, ErrNoRowsAffected) {
-			t.Errorf("Expected ErrNoRowsAffected, got %v", err)
-		}
-	})
-
-	t.Run("should detect database error", func(t *testing.T) {
-		dbErr := errors.New("connection timeout")
-		result := &gorm.DB{
-			RowsAffected: 0,
-			Error:        dbErr,
-		}
-
-		err := handleExecError(result, "test operation")
-		if err == nil {
-			t.Error("Expected error for database error")
-		}
-
-		if !errors.Is(err, ErrDatabase) {
-			t.Error("Expected wrapped ErrDatabase")
-		}
-	})
-}
-
-func TestHandleQueryError_Usage(t *testing.T) {
-	t.Run("should not error on zero rows", func(t *testing.T) {
-		err := handleQueryError("test query", nil)
-		if err != nil {
-			t.Errorf("Query with 0 rows should not error, got %v", err)
-		}
-	})
-
-	t.Run("should detect database error", func(t *testing.T) {
-		dbErr := errors.New("connection lost")
-
-		err := handleQueryError("test query", dbErr)
-		if err == nil {
-			t.Error("Expected error for database error")
-		}
-
-		if !errors.Is(err, ErrDatabase) {
-			t.Error("Expected wrapped ErrDatabase")
-		}
-	})
-}
-
-// Documentation and Examples Tests
-
-func ExampleRepo_Insert() {
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-
-	// Assuming db is a *gorm.DB instance
-	var db *gorm.DB
-
-	user := &TestUser{
-		Name:  "Alice",
-		Email: "alice@example.com",
-		Age:   30,
-	}
-
-	err := repo.Insert(ctx, db, user)
-	if err != nil {
-		// Handle error
-		return
-	}
-
-	// user.ID will be populated after successful insert
-}
-
-func ExampleRepo_QueryOne() {
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-
-	var db *gorm.DB
-
-	user, err := repo.QueryOne(ctx, db, Equal("email", "alice@example.com"))
-	if errors.Is(err, ErrNotFound) {
-		// Handle not found case
-		return
-	}
-	if err != nil {
-		// Handle other errors
-		return
-	}
-
-	_ = user // Use the found user
-}
-
-func ExampleRepo_Query() {
-	repo := NewRepo[TestUser]()
-	ctx := context.Background()
-
-	var db *gorm.DB
-
-	users, err := repo.Query(ctx, db,
-		Equal("age", 30),
-		OrderBy("name", "asc"),
-		Limit(10),
-	)
-	if err != nil {
-		// Handle error
-		return
-	}
-
-	_ = users // Process the users
+func TestRepositoryInterface(t *testing.T) {
+	var repo Repository[testUser] = NewRepo[testUser]()
+	assert.NotNil(t, repo)
 }

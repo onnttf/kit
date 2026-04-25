@@ -17,13 +17,7 @@ var (
 )
 
 // Node is the output tree node. It holds the caller's item and its children.
-// Build constructs Nodes; callers should not modify them.
-//
-// Example:
-//
-//	roots, _ := b.Build()
-//	fmt.Println(roots[0].Item.Name)
-//	for _, child := range roots[0].Children { ... }
+// Build constructs Nodes; callers must not modify them.
 type Node[T any] struct {
 	Item     T
 	Children []*Node[T]
@@ -41,15 +35,6 @@ type node[T any] struct {
 
 // Builder builds a typed tree structure from arbitrary items. It is safe for
 // concurrent use. Keys are provided by the caller via KeyBy.
-//
-// Example:
-//
-//	roots, nodeMap := tree.NewBuilder[Dept]().
-//	    KeyBy(func(d Dept) int { return d.ID }).
-//	    ParentBy(func(d Dept) int { return d.ParentID }).
-//	    SortBy(func(d Dept) int { return d.Sort }).
-//	    WithItems(depts).
-//	    Build()
 type Builder[T any] struct {
 	mu    sync.RWMutex
 	items []*node[T]
@@ -69,10 +54,6 @@ type Builder[T any] struct {
 }
 
 // NewBuilder returns a new Builder ready for configuration.
-//
-// Example:
-//
-//	b := tree.NewBuilder[Dept]()
 func NewBuilder[T any]() *Builder[T] {
 	return &Builder[T]{
 		items: make([]*node[T], 0),
@@ -83,10 +64,6 @@ func NewBuilder[T any]() *Builder[T] {
 
 // KeyBy sets the function used to extract the unique key from each item.
 // Passing nil clears the key function.
-//
-// Example:
-//
-//	b.KeyBy(func(d Dept) int { return d.ID })
 func (b *Builder[T]) KeyBy(fn func(T) any) *Builder[T] {
 	if fn == nil {
 		b.mu.Lock()
@@ -105,10 +82,6 @@ func (b *Builder[T]) KeyBy(fn func(T) any) *Builder[T] {
 // ParentBy sets the function used to extract the parent key from each item.
 // When not set, all items are treated as root nodes. Passing nil clears the
 // parent function.
-//
-// Example:
-//
-//	b.ParentBy(func(d Dept) int { return d.ParentID })
 func (b *Builder[T]) ParentBy(fn func(T) any) *Builder[T] {
 	if fn == nil {
 		b.mu.Lock()
@@ -127,10 +100,6 @@ func (b *Builder[T]) ParentBy(fn func(T) any) *Builder[T] {
 // SortBy sets the function used to determine sibling sort order.
 // When not set, siblings retain their insertion order. Passing nil clears the
 // sort function.
-//
-// Example:
-//
-//	b.SortBy(func(d Dept) int { return d.Sort })
 func (b *Builder[T]) SortBy(fn func(T) int) *Builder[T] {
 	if fn == nil {
 		b.mu.Lock()
@@ -332,10 +301,6 @@ func (b *Builder[T]) isDescendant(ancestorKey, potentialDesc any) bool {
 
 // WithItems replaces all current items with the provided slice.
 // Passing nil clears all items.
-//
-// Example:
-//
-//	b.WithItems(depts)
 func (b *Builder[T]) WithItems(items []T) *Builder[T] {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -359,10 +324,6 @@ func (b *Builder[T]) WithItems(items []T) *Builder[T] {
 }
 
 // AddItem adds a single item to the builder.
-//
-// Example:
-//
-//	b.AddItem(Dept{ID: 3, ParentID: 1, Name: "HR"})
 func (b *Builder[T]) AddItem(item T) *Builder[T] {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -380,10 +341,6 @@ func (b *Builder[T]) AddItem(item T) *Builder[T] {
 
 // RemoveItem removes the item with the given key and all its descendants.
 // If the key does not exist, this is a no-op.
-//
-// Example:
-//
-//	b.RemoveItem(2) // removes node 2 and all its children
 func (b *Builder[T]) RemoveItem(key any) *Builder[T] {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -434,10 +391,6 @@ func (b *Builder[T]) RemoveItem(key any) *Builder[T] {
 // Self-moves, moves to a non-existent parent, and moves that would create
 // cycles are silently ignored.
 // MoveItem does not modify the item's fields; it stores an internal override.
-//
-// Example:
-//
-//	b.MoveItem(5, 2) // move item with key 5 under parent with key 2
 func (b *Builder[T]) MoveItem(key, newParentKey any) *Builder[T] {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -474,10 +427,6 @@ func (b *Builder[T]) MoveItem(key, newParentKey any) *Builder[T] {
 // UpdateItem applies fn to the item identified by key.
 // If the key function returns a new key after fn runs, the index is updated.
 // Passing nil fn is a no-op.
-//
-// Example:
-//
-//	b.UpdateItem(1, func(d *Dept) { d.Name = "Engineering" })
 func (b *Builder[T]) UpdateItem(key any, fn func(*T)) *Builder[T] {
 	if fn == nil {
 		return b
@@ -507,10 +456,6 @@ func (b *Builder[T]) UpdateItem(key any, fn func(*T)) *Builder[T] {
 // Filter returns a new Builder containing only items for which predicate returns true.
 // The new Builder inherits the key extraction functions from the original.
 // Passing nil predicate retains all items.
-//
-// Example:
-//
-//	active := b.Filter(func(d Dept) bool { return d.Active })
 func (b *Builder[T]) Filter(predicate func(T) bool) *Builder[T] {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -549,10 +494,6 @@ func (b *Builder[T]) Filter(predicate func(T) bool) *Builder[T] {
 
 // Transform applies fn to every item in the builder in place.
 // Passing nil fn is a no-op.
-//
-// Example:
-//
-//	b.Transform(func(d *Dept) { d.Name = strings.ToUpper(d.Name) })
 func (b *Builder[T]) Transform(fn func(*T)) *Builder[T] {
 	if fn == nil {
 		return b
@@ -570,10 +511,6 @@ func (b *Builder[T]) Transform(fn func(*T)) *Builder[T] {
 // Map returns a new Builder with all items transformed by fn.
 // The new Builder inherits parent and sort functions from the original.
 // Key function must be provided for the new type.
-//
-// Example:
-//
-//	ids := b.Map(func(d Dept) string { return d.Name })
 func (b *Builder[T]) Map(fn func(T) T, keyFn func(T) any) *Builder[T] {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -612,10 +549,6 @@ func (b *Builder[T]) Map(fn func(T) T, keyFn func(T) any) *Builder[T] {
 
 // Find returns the first node matching predicate, or nil if not found.
 // Searches in insertion order (not tree order).
-//
-// Example:
-//
-//	node := b.Find(func(d Dept) bool { return d.Name == "HR" })
 func (b *Builder[T]) Find(predicate func(T) bool) *Node[T] {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -636,11 +569,7 @@ func (b *Builder[T]) Find(predicate func(T) bool) *Node[T] {
 	return nil
 }
 
-// Contains returns true if a node with the given key exists.
-//
-// Example:
-//
-//	exists := b.Contains(5)
+// Contains reports whether a node with the given key exists.
 func (b *Builder[T]) Contains(key any) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -658,10 +587,6 @@ func (b *Builder[T]) Contains(key any) bool {
 
 // Depth returns the depth of the node at key (root = 1).
 // Returns 0 if key does not exist.
-//
-// Example:
-//
-//	depth := b.Depth(5)
 func (b *Builder[T]) Depth(key any) int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -703,10 +628,6 @@ func (b *Builder[T]) Depth(key any) int {
 // Build constructs and returns the tree. Returns root nodes in sort order and a
 // map for direct key lookup. Returns nil, nil if KeyBy is not set.
 // The returned roots slice and nodeMap must not be modified by the caller.
-//
-// Example:
-//
-//	roots, nodeMap, err := b.Build()
 func (b *Builder[T]) Build() ([]*Node[T], map[any]*Node[T], error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -722,10 +643,6 @@ func (b *Builder[T]) Build() ([]*Node[T], map[any]*Node[T], error) {
 
 // Clone returns a new Builder with an independent deep copy of all items.
 // Key extraction functions are shared (not copied) between original and clone.
-//
-// Example:
-//
-//	copy := b.Clone()
 func (b *Builder[T]) Clone() *Builder[T] {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -759,10 +676,6 @@ func (b *Builder[T]) Clone() *Builder[T] {
 // Validate checks the item set for structural problems. It returns errors for
 // any cycles or orphaned nodes (nodes whose parent is not in the set).
 // Returns a single error if KeyBy has not been set.
-//
-// Example:
-//
-//	if errs := b.Validate(); len(errs) != 0 { log.Fatal(errs) }
 func (b *Builder[T]) Validate() []error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -784,7 +697,7 @@ func (b *Builder[T]) Validate() []error {
 			continue
 		}
 		if _, exists := b.nodeCache[pk]; !exists {
-			errs = append(errs, fmt.Errorf("orphaned node: %v", k))
+			errs = append(errs, fmt.Errorf("%w: %v", ErrOrphanedNode, k))
 		}
 	}
 
@@ -807,7 +720,7 @@ func (b *Builder[T]) Validate() []error {
 			stack = stack[:len(stack)-1]
 
 			if _, inPath := path[cur]; inPath {
-				errs = append(errs, fmt.Errorf("cycle detected: %v", cur))
+				errs = append(errs, fmt.Errorf("%w: %v", ErrCycle, cur))
 				break
 			}
 			if visited[cur] == done {
@@ -842,11 +755,6 @@ func (b *Builder[T]) Validate() []error {
 
 // Statistics returns aggregate metrics about the built tree.
 // Keys: "totalNodes", "rootNodes", "maxDepth", "leafNodes", "avgChildrenPerNode".
-//
-// Example:
-//
-//	stats := b.Statistics()
-//	fmt.Println(stats["totalNodes"], stats["maxDepth"])
 func (b *Builder[T]) Statistics() map[string]any {
 	b.mu.Lock()
 	defer b.mu.Unlock()

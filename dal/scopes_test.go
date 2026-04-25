@@ -2,374 +2,177 @@ package dal
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-// Test Suite for Paginate Function
-
-func TestPaginate_NormalizePageNumber(t *testing.T) {
-	tests := []struct {
-		name           string
-		page           int
-		pageSize       int
-		expectedOffset int
-		expectedLimit  int
-	}{
-		{
-			name:           "valid page 1",
-			page:           1,
-			pageSize:       10,
-			expectedOffset: 0,
-			expectedLimit:  10,
-		},
-		{
-			name:           "valid page 2",
-			page:           2,
-			pageSize:       10,
-			expectedOffset: 10,
-			expectedLimit:  10,
-		},
-		{
-			name:           "zero page defaults to 1",
-			page:           0,
-			pageSize:       10,
-			expectedOffset: 0,
-			expectedLimit:  10,
-		},
-		{
-			name:           "negative page defaults to 1",
-			page:           -5,
-			pageSize:       10,
-			expectedOffset: 0,
-			expectedLimit:  10,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			scope := Paginate(tt.page, tt.pageSize)
-
-			// Just verify the scope function is created successfully
-			// Testing actual SQL generation requires a real DB or DryRun mode
-			if scope == nil {
-				t.Error("Expected non-nil scope function")
-			}
-		})
-	}
+type testProduct struct {
+	ID    uint    `gorm:"primarykey"`
+	Name  string  `gorm:"size:255"`
+	Price float64 `gorm:"size:255"`
 }
 
-func TestPaginate_NormalizePageSize(t *testing.T) {
-	tests := []struct {
-		name             string
-		page             int
-		pageSize         int
-		expectedPageSize int
-	}{
-		{
-			name:             "valid page size",
-			page:             1,
-			pageSize:         20,
-			expectedPageSize: 20,
-		},
-		{
-			name:             "zero page size defaults to DefaultPageSize",
-			page:             1,
-			pageSize:         0,
-			expectedPageSize: DefaultPageSize,
-		},
-		{
-			name:             "negative page size defaults to DefaultPageSize",
-			page:             1,
-			pageSize:         -10,
-			expectedPageSize: DefaultPageSize,
-		},
-		{
-			name:             "page size exceeding max capped to MaxPageSize",
-			page:             1,
-			pageSize:         200,
-			expectedPageSize: MaxPageSize,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			scope := Paginate(tt.page, tt.pageSize)
-			if scope == nil {
-				t.Error("Expected non-nil scope function")
-			}
-		})
-	}
-}
-
-func TestPaginate_OffsetCalculation(t *testing.T) {
-	tests := []struct {
-		page           int
-		pageSize       int
-		expectedOffset int
-	}{
-		{page: 1, pageSize: 10, expectedOffset: 0},
-		{page: 2, pageSize: 10, expectedOffset: 10},
-		{page: 3, pageSize: 10, expectedOffset: 20},
-		{page: 5, pageSize: 25, expectedOffset: 100},
-		{page: 10, pageSize: 50, expectedOffset: 450},
-	}
-
-	for _, tt := range tests {
-		t.Run("offset calculation", func(t *testing.T) {
-			scope := Paginate(tt.page, tt.pageSize)
-			if scope == nil {
-				t.Error("Expected non-nil scope function")
-			}
-			// The actual offset would be verified in integration tests
-		})
-	}
-}
-
-// Test Suite for Condition Function
-
-func TestEqual_ValidInput(t *testing.T) {
-	tests := []struct {
-		name   string
-		column string
-		value  any
-	}{
-		{
-			name:   "string value",
-			column: "name",
-			value:  "Alice",
-		},
-		{
-			name:   "integer value",
-			column: "age",
-			value:  30,
-		},
-		{
-			name:   "boolean value",
-			column: "active",
-			value:  true,
-		},
-		{
-			name:   "nil value",
-			column: "deleted_at",
-			value:  nil,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			scope := Equal(tt.column, tt.value)
-			if scope == nil {
-				t.Error("Expected non-nil scope function")
-			}
-		})
-	}
-}
-
-func TestEqual_SpecialCharactersInColumn(t *testing.T) {
-	// Test that special characters are properly handled
-	columns := []string{
-		"user_id",
-		"user.id",
-		"table.column",
-	}
-
-	for _, column := range columns {
-		t.Run(column, func(t *testing.T) {
-			scope := Equal(column, 123)
-			if scope == nil {
-				t.Error("Expected non-nil scope function")
-			}
-		})
-	}
-}
-
-// Test Suite for OrderBy Function
-
-func TestOrderBy_ValidDirections(t *testing.T) {
-	tests := []struct {
-		name      string
-		field     string
-		direction string
-	}{
-		{
-			name:      "ascending lowercase",
-			field:     "created_at",
-			direction: "asc",
-		},
-		{
-			name:      "ascending uppercase",
-			field:     "created_at",
-			direction: "ASC",
-		},
-		{
-			name:      "descending lowercase",
-			field:     "created_at",
-			direction: "desc",
-		},
-		{
-			name:      "descending uppercase",
-			field:     "created_at",
-			direction: "DESC",
-		},
-		{
-			name:      "descending mixed case",
-			field:     "created_at",
-			direction: "DeSc",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			scope := OrderBy(tt.field, tt.direction)
-			if scope == nil {
-				t.Error("Expected non-nil scope function")
-			}
-		})
-	}
-}
-
-func TestOrderBy_InvalidDirection(t *testing.T) {
-	// Invalid directions should default to ASC
-	invalidDirections := []string{"invalid", "random", "", "up", "down"}
-
-	for _, direction := range invalidDirections {
-		t.Run(direction, func(t *testing.T) {
-			scope := OrderBy("created_at", direction)
-			if scope == nil {
-				t.Error("Expected non-nil scope function")
-			}
-		})
-	}
-}
-
-// Test Suite for Limit Function
-
-func TestLimit_ValidValues(t *testing.T) {
-	limits := []int{1, 10, 50, 100, 1000}
-
-	for _, limit := range limits {
-		t.Run("limit value", func(t *testing.T) {
-			scope := Limit(limit)
-			if scope == nil {
-				t.Error("Expected non-nil scope function")
-			}
-		})
-	}
-}
-
-func TestLimit_EdgeCases(t *testing.T) {
-	tests := []struct {
-		name  string
-		limit int
-	}{
-		{"zero limit", 0},
-		{"negative limit", -10},
-		{"very large limit", 999999},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			scope := Limit(tt.limit)
-			if scope == nil {
-				t.Error("Expected non-nil scope function")
-			}
-		})
-	}
-}
-
-// Test Suite for Like Function
-
-func TestLike_ValidInput(t *testing.T) {
-	tests := []struct {
-		name   string
-		column string
-		value  string
-	}{
-		{
-			name:   "basic search",
-			column: "name",
-			value:  "john",
-		},
-		{
-			name:   "empty search",
-			column: "name",
-			value:  "",
-		},
-		{
-			name:   "special characters",
-			column: "email",
-			value:  "test@example.com",
-		},
-		{
-			name:   "unicode characters",
-			column: "description",
-			value:  "测试",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			scope := Like(tt.column, tt.value)
-			if scope == nil {
-				t.Error("Expected non-nil scope function")
-			}
-		})
-	}
-}
-
-func TestLike_WildcardHandling(t *testing.T) {
-	// Test that wildcards in value are treated as literals
-	tests := []struct {
-		name  string
-		value string
-	}{
-		{"percent sign", "test%value"},
-		{"underscore", "test_value"},
-		{"both wildcards", "test%_value"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			scope := Like("column", tt.value)
-			if scope == nil {
-				t.Error("Expected non-nil scope function")
-			}
-		})
-	}
-}
-
-// Integration-style Tests (Scope Composition)
-
-func TestScopeComposition(t *testing.T) {
-	t.Skip("Scope composition requires real database - skipping")
-
-	t.Run("combine multiple scopes", func(t *testing.T) {
-		// This would require a real DB connection to test properly
-		// Just verify the scopes can be created
-		_ = Paginate(2, 20)
-		_ = Equal("active", true)
-		_ = OrderBy("created_at", "desc")
+func setupTestDBForScopes(t *testing.T) *gorm.DB {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
 	})
-
-	t.Run("search with pagination", func(t *testing.T) {
-		// Verify scopes can be created
-		_ = Like("name", "john")
-		_ = Paginate(1, 10)
-		_ = OrderBy("name", "asc")
-	})
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+	err = db.AutoMigrate(&testProduct{})
+	if err != nil {
+		t.Fatalf("failed to migrate: %v", err)
+	}
+	return db
 }
 
-// Constants Tests
+func TestEscapeLike(t *testing.T) {
+	assert.Equal(t, "hello", escapeLike("hello"))
+	assert.Equal(t, `hello\%world`, escapeLike("hello%world"))
+	assert.Equal(t, `hello\_world`, escapeLike("hello_world"))
+}
+
+func TestPaginate(t *testing.T) {
+	db := setupTestDBForScopes(t)
+	for i := 1; i <= 50; i++ {
+		db.Create(&testProduct{Name: "Product", Price: float64(i)})
+	}
+
+	scope := Paginate(1, 10)
+	result := scope(db)
+	var products []testProduct
+	result.Find(&products)
+	assert.Equal(t, 10, len(products))
+}
+
+func TestEqual(t *testing.T) {
+	db := setupTestDBForScopes(t)
+	db.Create(&testProduct{Name: "Apple", Price: 1.5})
+	db.Create(&testProduct{Name: "Apple", Price: 2.0})
+
+	scope := Equal("name", "Apple")
+	result := scope(db)
+	var products []testProduct
+	result.Find(&products)
+	assert.Len(t, products, 2)
+}
+
+func TestNotEqual(t *testing.T) {
+	db := setupTestDBForScopes(t)
+	db.Create(&testProduct{Name: "Apple", Price: 1.5})
+	db.Create(&testProduct{Name: "Banana", Price: 0.5})
+
+	scope := NotEqual("name", "Apple")
+	result := scope(db)
+	var products []testProduct
+	result.Find(&products)
+	assert.Len(t, products, 1)
+}
+
+func TestGreaterThan(t *testing.T) {
+	db := setupTestDBForScopes(t)
+	db.Create(&testProduct{Name: "Cheap", Price: 1.0})
+	db.Create(&testProduct{Name: "Expensive", Price: 10.0})
+
+	scope := GreaterThan("price", 5.0)
+	result := scope(db)
+	var products []testProduct
+	result.Find(&products)
+	assert.Len(t, products, 1)
+}
+
+func TestLessThan(t *testing.T) {
+	db := setupTestDBForScopes(t)
+	db.Create(&testProduct{Name: "Cheap", Price: 1.0})
+	db.Create(&testProduct{Name: "Expensive", Price: 10.0})
+
+	scope := LessThan("price", 5.0)
+	result := scope(db)
+	var products []testProduct
+	result.Find(&products)
+	assert.Len(t, products, 1)
+}
+
+func TestIn(t *testing.T) {
+	db := setupTestDBForScopes(t)
+	db.Create(&testProduct{Name: "Apple", Price: 1.5})
+	db.Create(&testProduct{Name: "Banana", Price: 0.5})
+
+	scope := In("name", []string{"Apple", "Banana"})
+	result := scope(db)
+	var products []testProduct
+	result.Find(&products)
+	assert.Len(t, products, 2)
+}
+
+func TestNotIn(t *testing.T) {
+	db := setupTestDBForScopes(t)
+	db.Create(&testProduct{Name: "Apple", Price: 1.5})
+	db.Create(&testProduct{Name: "Banana", Price: 0.5})
+	db.Create(&testProduct{Name: "Orange", Price: 2.0})
+
+	scope := NotIn("name", []string{"Apple", "Banana"})
+	result := scope(db)
+	var products []testProduct
+	result.Find(&products)
+	assert.Len(t, products, 1)
+}
+
+func TestBetween(t *testing.T) {
+	db := setupTestDBForScopes(t)
+	db.Create(&testProduct{Name: "Item1", Price: 1.0})
+	db.Create(&testProduct{Name: "Item2", Price: 5.0})
+	db.Create(&testProduct{Name: "Item3", Price: 10.0})
+
+	scope := Between("price", 1.0, 5.0)
+	result := scope(db)
+	var products []testProduct
+	result.Find(&products)
+	assert.Len(t, products, 2)
+}
+
+func TestOrderBy(t *testing.T) {
+	db := setupTestDBForScopes(t)
+	db.Create(&testProduct{Name: "C", Price: 3.0})
+	db.Create(&testProduct{Name: "A", Price: 1.0})
+	db.Create(&testProduct{Name: "B", Price: 2.0})
+
+	scope := OrderBy("name", "asc")
+	result := scope(db)
+	var products []testProduct
+	result.Find(&products)
+	assert.Equal(t, "A", products[0].Name)
+}
+
+func TestLimit(t *testing.T) {
+	db := setupTestDBForScopes(t)
+	db.Create(&testProduct{Name: "Item1", Price: 1.0})
+	db.Create(&testProduct{Name: "Item2", Price: 2.0})
+	db.Create(&testProduct{Name: "Item3", Price: 3.0})
+
+	scope := Limit(2)
+	result := scope(db)
+	var products []testProduct
+	result.Find(&products)
+	assert.Len(t, products, 2)
+}
+
+func TestLike(t *testing.T) {
+	db := setupTestDBForScopes(t)
+	db.Create(&testProduct{Name: "Apple", Price: 1.5})
+	db.Create(&testProduct{Name: "ApplePie", Price: 5.0})
+
+	scope := Like("name", "Apple")
+	result := scope(db)
+	var products []testProduct
+	result.Find(&products)
+	assert.Len(t, products, 2)
+}
 
 func TestPaginationConstants(t *testing.T) {
-	if DefaultPageSize <= 0 {
-		t.Error("DefaultPageSize must be positive")
-	}
-
-	if MaxPageSize <= 0 {
-		t.Error("MaxPageSize must be positive")
-	}
-
-	if MaxPageSize < DefaultPageSize {
-		t.Error("MaxPageSize should be >= DefaultPageSize")
-	}
+	assert.Equal(t, 10, DefaultPageSize)
+	assert.Equal(t, 100, MaxPageSize)
 }
