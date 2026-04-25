@@ -28,6 +28,7 @@ type errorCounter struct {
 }
 
 // An Executor runs tasks concurrently with retry and error handling.
+// Each Executor should be used only once for Run or RunStream.
 type Executor[T any] struct {
 	config Config[T]
 
@@ -44,7 +45,6 @@ type Executor[T any] struct {
 }
 
 // New returns a new Executor with the given config.
-//
 // Each Executor should be used only once for Run or RunStream.
 // To process multiple batches, create a new Executor for each.
 func New[T any](config Config[T]) (*Executor[T], error) {
@@ -57,7 +57,7 @@ func New[T any](config Config[T]) (*Executor[T], error) {
 	return &Executor[T]{config: config}, nil
 }
 
-// Run processes items concurrently and returns the result.
+// Run processes items concurrently.
 func (e *Executor[T]) Run(ctx context.Context, items []T, handler Handler[T]) (*Result, error) {
 	if !e.used.CompareAndSwap(false, true) {
 		return nil, ErrExecutorReused
@@ -111,9 +111,7 @@ func (e *Executor[T]) Run(ctx context.Context, items []T, handler Handler[T]) (*
 
 // RunStream processes items from a channel concurrently.
 // The input channel should be closed by the caller when done.
-//
-// This is useful for streaming data where the total count is unknown
-// or to avoid loading all items into memory.
+// It is useful for streaming data where the total count is unknown.
 func (e *Executor[T]) RunStream(
 	ctx context.Context,
 	in <-chan T,
@@ -190,7 +188,9 @@ func (e *Executor[T]) populateResult(ctx context.Context, result *Result) {
 	}
 
 	result.ErrorSamples = e.samples
-	result.ErrorCount = make(map[string]int)
+	if result.ErrorCount == nil {
+		result.ErrorCount = make(map[string]int)
+	}
 
 	e.errorCounts.Range(func(key, value any) bool {
 		strKey, ok := key.(string)
@@ -318,14 +318,14 @@ func (e *Executor[T]) execute(
 		defer func() {
 			taskCancel()
 			if errors.Is(err, context.DeadlineExceeded) {
-				err = fmt.Errorf("task timeout: %w, timeout=%v", err, e.config.Timeout)
+				err = fmt.Errorf("task timeout after %v: %w", e.config.Timeout, err)
 			}
 		}()
 	}
 
 	defer func() {
 		if p := recover(); p != nil {
-			err = fmt.Errorf("panic recovered: err=%v", p)
+			err = fmt.Errorf("panic recovered: %v", p)
 			if e.config.PanicPolicy(p, item.data, item.attempt) == ActionAbort {
 				e.abort(item, err)
 				ctxCancel()

@@ -23,15 +23,6 @@ func IsXLSX(filename string) bool {
 
 // Read reads all sheets from the Excel file.
 // The returned map keys are sheet names.
-//
-// Example:
-//
-//	data, err := Read("test.xlsx")
-//	for name, rows := range data {
-//	    for _, row := range rows {
-//	        fmt.Println(name, row)
-//	    }
-//	}
 func Read(path string) (map[string][][]string, error) {
 	wb, err := Open(path)
 	if err != nil {
@@ -42,13 +33,6 @@ func Read(path string) (map[string][][]string, error) {
 }
 
 // ReadSheet reads a single sheet from the Excel file.
-//
-// Example:
-//
-//	rows, err := ReadSheet("test.xlsx", "Sheet1")
-//	for _, row := range rows {
-//	    fmt.Println(row)
-//	}
 func ReadSheet(path, name string) ([][]string, error) {
 	wb, err := Open(path)
 	if err != nil {
@@ -61,13 +45,6 @@ func ReadSheet(path, name string) ([][]string, error) {
 // Walk iterates over rows and calls fn.
 // If fn returns an error, iteration stops.
 // fn receives the row index (1-based) and the row values.
-//
-// Example:
-//
-//	err := Walk("test.xlsx", "Sheet1", func(idx int, row []string) error {
-//	    fmt.Println(idx, row)
-//	    return nil
-//	})
 func Walk(path, name string, fn func(int, []string) error) error {
 	wb, err := Open(path)
 	if err != nil {
@@ -78,20 +55,7 @@ func Walk(path, name string, fn func(int, []string) error) error {
 }
 
 // ScanRow reads the sheet and calls fn for each row.
-// Parsing errors are skipped. If fn returns an error, the scan stops.
-// fn receives the row index (1-based) and the parsed value.
-//
-// Example:
-//
-//	type Person struct {
-//	    Name string `excel:"A"`
-//	    Age  int    `excel:"B"`
-//	}
-//
-//	err := ScanRow[Person]("test.xlsx", "Sheet1", func(idx int, p *Person) error {
-//	    fmt.Println(idx, p.Name)
-//	    return nil
-//	})
+// Parsing errors are skipped. fn receives the row index (1-based) and the parsed value.
 func ScanRow[T any](path, name string, fn func(int, *T) error) error {
 	wb, err := Open(path)
 	if err != nil {
@@ -110,10 +74,6 @@ func ScanRow[T any](path, name string, fn func(int, *T) error) error {
 
 // ScanAll reads the sheet and returns all rows parsed as T.
 // Rows that fail to parse are returned as nil.
-//
-// Example:
-//
-//	people, err := ScanAll[Person]("test.xlsx", "Sheet1")
 func ScanAll[T any](path, name string) ([]*T, error) {
 	wb, err := Open(path)
 	if err != nil {
@@ -132,10 +92,6 @@ func ScanAll[T any](path, name string) ([]*T, error) {
 
 // Parse parses a row into type T.
 // Rows with fewer columns than required fields are handled gracefully.
-//
-// Example:
-//
-//	person, err := Parse[Person]([]string{"Alice", "25"})
 func Parse[T any](row []string) (*T, error) {
 	info := getStructInfo[T]()
 	v := reflect.New(info.typ).Elem()
@@ -161,14 +117,6 @@ type Workbook struct {
 }
 
 // Open opens an Excel file.
-//
-// Example:
-//
-//	wb, err := Open("test.xlsx")
-//	if err != nil {
-//	    return err
-//	}
-//	defer wb.Close()
 func Open(path string) (*Workbook, error) {
 	f, err := excelize.OpenFile(path)
 	if err != nil {
@@ -186,10 +134,6 @@ func (w *Workbook) Close() error {
 }
 
 // Sheets returns all sheet names.
-//
-// Example:
-//
-//	names := wb.Sheets()
 func (w *Workbook) Sheets() []string {
 	if w.file == nil {
 		return []string{}
@@ -203,10 +147,6 @@ func (w *Workbook) Sheet(name string) *Sheet {
 }
 
 // ReadAll reads all sheets and returns a map of sheet names to rows.
-//
-// Example:
-//
-//	data, err := wb.ReadAll()
 func (w *Workbook) ReadAll() (map[string][][]string, error) {
 	sheets := w.Sheets()
 	result := make(map[string][][]string, len(sheets))

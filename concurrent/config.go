@@ -56,13 +56,13 @@ type Config[T any] struct {
 // Validate returns an error if the configuration is invalid.
 func (c *Config[T]) Validate() error {
 	if c.Concurrency <= 0 {
-		return fmt.Errorf("concurrency is invalid: must be > 0, got %d", c.Concurrency)
+		return fmt.Errorf("concurrency must be > 0, got %d", c.Concurrency)
 	}
 	if c.MaxRetry < 0 {
-		return fmt.Errorf("max retry is invalid: must be >= 0, got %d", c.MaxRetry)
+		return fmt.Errorf("max retry must be >= 0, got %d", c.MaxRetry)
 	}
 	if c.Timeout < 0 {
-		return fmt.Errorf("timeout is invalid: must be >= 0, got %v", c.Timeout)
+		return fmt.Errorf("timeout must be >= 0, got %v", c.Timeout)
 	}
 	return nil
 }

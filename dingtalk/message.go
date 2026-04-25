@@ -46,10 +46,6 @@ type TextMsg struct {
 }
 
 // NewTextMsg creates a TextMsg instance with the specified content.
-//
-// Example:
-//
-//	msg := dingtalk.NewTextMsg("Hello, world!")
 func NewTextMsg(content string) *TextMsg {
 	m := &TextMsg{MsgType: MsgTypeText}
 	m.Text.Content = content
@@ -57,20 +53,12 @@ func NewTextMsg(content string) *TextMsg {
 }
 
 // WithAtMobiles sets the mobile numbers to mention.
-//
-// Example:
-//
-//	msg := dingtalk.NewTextMsg("Hello").WithAtMobiles([]string{"13800138000"})
 func (m *TextMsg) WithAtMobiles(mobiles []string) *TextMsg {
 	m.At.AtMobiles = mobiles
 	return m
 }
 
 // WithIsAtAll sets whether to mention all members.
-//
-// Example:
-//
-//	msg := dingtalk.NewTextMsg("Hello").WithIsAtAll(true)
 func (m *TextMsg) WithIsAtAll(isAll bool) *TextMsg {
 	m.At.IsAtAll = isAll
 	return m
@@ -91,10 +79,6 @@ type MarkdownMsg struct {
 }
 
 // NewMarkdownMsg creates a MarkdownMsg instance with the required title and text content.
-//
-// Example:
-//
-//	msg := dingtalk.NewMarkdownMsg("Title", "## Hello\nWorld")
 func NewMarkdownMsg(title, text string) *MarkdownMsg {
 	m := &MarkdownMsg{MsgType: MsgTypeMarkdown}
 	m.Markdown.Title = title
@@ -130,10 +114,6 @@ type LinkMsg struct {
 }
 
 // NewLinkMsg creates a LinkMsg instance with the required title, text, and destination URL.
-//
-// Example:
-//
-//	msg := dingtalk.NewLinkMsg("Title", "Description", "https://example.com")
 func NewLinkMsg(title, text, messageURL string) *LinkMsg {
 	m := &LinkMsg{MsgType: MsgTypeLink}
 	m.Link.Title = title
@@ -143,10 +123,6 @@ func NewLinkMsg(title, text, messageURL string) *LinkMsg {
 }
 
 // WithPicURL sets the optional picture URL to display on the card.
-//
-// Example:
-//
-//	msg := dingtalk.NewLinkMsg("Title", "Desc", "https://example.com").WithPicURL("https://example.com/image.png")
 func (m *LinkMsg) WithPicURL(url string) *LinkMsg {
 	m.Link.PicURL = url
 	return m
@@ -176,10 +152,6 @@ type ActionCardMsg struct {
 }
 
 // NewSingleActionCard creates an ActionCardMsg that uses a single action link.
-//
-// Example:
-//
-//	msg := dingtalk.NewSingleActionCard("Title", "Text", "Click", "https://example.com")
 func NewSingleActionCard(title, text, singleTitle, singleURL string) *ActionCardMsg {
 	m := &ActionCardMsg{MsgType: MsgTypeActionCard}
 	m.ActionCard.Title = title
@@ -190,13 +162,6 @@ func NewSingleActionCard(title, text, singleTitle, singleURL string) *ActionCard
 }
 
 // NewMultiActionCard creates an ActionCardMsg that uses multiple buttons.
-//
-// Example:
-//
-//	msg := dingtalk.NewMultiActionCard("Title", "Text", []dingtalk.ActionCardBtn{
-//	    {Title: "Button1", ActionURL: "https://example.com/1"},
-//	    {Title: "Button2", ActionURL: "https://example.com/2"},
-//	})
 func NewMultiActionCard(title, text string, btns []ActionCardBtn) *ActionCardMsg {
 	m := &ActionCardMsg{MsgType: MsgTypeActionCard}
 	m.ActionCard.Title = title
@@ -206,10 +171,6 @@ func NewMultiActionCard(title, text string, btns []ActionCardBtn) *ActionCardMsg
 }
 
 // WithBtnOrientation sets button orientation.
-//
-// Example:
-//
-//	msg := dingtalk.NewMultiActionCard("Title", "Text", btns).WithBtnOrientation(dingtalk.BtnOrientationVertical)
 func (m *ActionCardMsg) WithBtnOrientation(orientation string) *ActionCardMsg {
 	if orientation == BtnOrientationHorizontal || orientation == BtnOrientationVertical {
 		m.ActionCard.BtnOrientation = orientation
@@ -237,12 +198,6 @@ type FeedCardMsg struct {
 }
 
 // NewFeedCardMsg creates a FeedCardMsg instance with the provided links.
-//
-// Example:
-//
-//	msg := dingtalk.NewFeedCardMsg([]dingtalk.FeedLink{
-//	    {Title: "Link1", MessageURL: "https://example.com/1", PicURL: "https://example.com/1.png"},
-//	})
 func NewFeedCardMsg(links []FeedLink) *FeedCardMsg {
 	m := &FeedCardMsg{MsgType: MsgTypeFeedCard}
 	m.FeedCard.Links = links

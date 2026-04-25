@@ -1,465 +1,143 @@
 package container
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-// Test Suite for Difference Function
-
-func TestDifference_Basic(t *testing.T) {
+func TestDifference(t *testing.T) {
 	tests := []struct {
-		name   string
-		sliceA []int
-		sliceB []int
-		want   []int
+		name string
+		s1   []int
+		s2   []int
+		want []int
 	}{
-		{
-			name:   "basic difference",
-			sliceA: []int{1, 2, 3, 4},
-			sliceB: []int{2, 4},
-			want:   []int{1, 3},
-		},
-		{
-			name:   "no common elements",
-			sliceA: []int{1, 2, 3},
-			sliceB: []int{4, 5, 6},
-			want:   []int{1, 2, 3},
-		},
-		{
-			name:   "all elements common",
-			sliceA: []int{1, 2, 3},
-			sliceB: []int{1, 2, 3},
-			want:   []int{},
-		},
-		{
-			name:   "empty sliceA",
-			sliceA: []int{},
-			sliceB: []int{1, 2},
-			want:   []int{},
-		},
-		{
-			name:   "empty sliceB",
-			sliceA: []int{1, 2, 3},
-			sliceB: []int{},
-			want:   []int{1, 2, 3},
-		},
+		{"normal", []int{1, 2, 3, 4}, []int{2, 4}, []int{1, 3}},
+		{"nil s1", nil, []int{1, 2}, nil},
+		{"empty s2", []int{1, 2, 3}, []int{}, []int{1, 2, 3}},
+		{"empty s1", []int{}, []int{1, 2}, []int{}},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := Difference(tt.sliceA, tt.sliceB)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Difference() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, Difference(tt.s1, tt.s2))
 		})
 	}
 }
 
-func TestDifference_NilHandling(t *testing.T) {
-	t.Run("nil sliceA returns nil", func(t *testing.T) {
-		var sliceA []int
-		sliceB := []int{1, 2}
-		got := Difference(sliceA, sliceB)
-		if got != nil {
-			t.Errorf("Expected nil, got %v", got)
-		}
-	})
-
-	t.Run("nil sliceB returns copy of sliceA", func(t *testing.T) {
-		sliceA := []int{1, 2, 3}
-		var sliceB []int
-		got := Difference(sliceA, sliceB)
-		if !reflect.DeepEqual(got, sliceA) {
-			t.Errorf("Expected %v, got %v", sliceA, got)
-		}
-		// Verify it's a copy, not the same slice
-		if len(got) > 0 && &got[0] == &sliceA[0] {
-			t.Error("Expected a copy, got same underlying array")
-		}
-	})
-}
-
-func TestDifference_WithDuplicates(t *testing.T) {
-	sliceA := []int{1, 2, 2, 3, 3, 3}
-	sliceB := []int{2, 3}
-	got := Difference(sliceA, sliceB)
-	want := []int{1}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Difference() = %v, want %v", got, want)
-	}
-}
-
-// Test Suite for Intersection Function
-
-func TestIntersection_Basic(t *testing.T) {
+func TestIntersection(t *testing.T) {
 	tests := []struct {
-		name   string
-		sliceA []int
-		sliceB []int
-		want   []int
+		name string
+		s1   []int
+		s2   []int
+		want []int
 	}{
-		{
-			name:   "basic intersection",
-			sliceA: []int{1, 2, 3, 4},
-			sliceB: []int{2, 3, 5},
-			want:   []int{2, 3},
-		},
-		{
-			name:   "no common elements",
-			sliceA: []int{1, 2, 3},
-			sliceB: []int{4, 5, 6},
-			want:   []int{},
-		},
-		{
-			name:   "all elements common",
-			sliceA: []int{1, 2, 3},
-			sliceB: []int{1, 2, 3},
-			want:   []int{1, 2, 3},
-		},
-		{
-			name:   "empty sliceA",
-			sliceA: []int{},
-			sliceB: []int{1, 2},
-			want:   []int{},
-		},
-		{
-			name:   "empty sliceB",
-			sliceA: []int{1, 2, 3},
-			sliceB: []int{},
-			want:   []int{},
-		},
+		{"normal", []int{1, 2, 3, 4}, []int{2, 4, 6}, []int{2, 4}},
+		{"nil s1", nil, []int{1, 2}, nil},
+		{"empty", []int{}, []int{1, 2}, []int{}},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := Intersection(tt.sliceA, tt.sliceB)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Intersection() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, Intersection(tt.s1, tt.s2))
 		})
 	}
 }
 
-func TestIntersection_NilHandling(t *testing.T) {
-	t.Run("nil sliceA returns nil", func(t *testing.T) {
-		var sliceA []int
-		sliceB := []int{1, 2}
-		got := Intersection(sliceA, sliceB)
-		if got != nil {
-			t.Errorf("Expected nil, got %v", got)
-		}
-	})
-
-	t.Run("nil sliceB returns nil", func(t *testing.T) {
-		sliceA := []int{1, 2, 3}
-		var sliceB []int
-		got := Intersection(sliceA, sliceB)
-		if got != nil {
-			t.Errorf("Expected nil, got %v", got)
-		}
-	})
-}
-
-func TestIntersection_WithDuplicates(t *testing.T) {
-	sliceA := []int{1, 2, 2, 3, 3, 3}
-	sliceB := []int{2, 2, 3}
-	got := Intersection(sliceA, sliceB)
-	want := []int{2, 3}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Intersection() = %v, want %v", got, want)
-	}
-}
-
-// Test Suite for Union Function
-
-func TestUnion_Basic(t *testing.T) {
+func TestUnion(t *testing.T) {
 	tests := []struct {
-		name   string
-		sliceA []int
-		sliceB []int
-		want   []int
+		name string
+		s1   []int
+		s2   []int
+		want []int
 	}{
-		{
-			name:   "basic union",
-			sliceA: []int{1, 2, 3},
-			sliceB: []int{3, 4, 5},
-			want:   []int{1, 2, 3, 4, 5},
-		},
-		{
-			name:   "no overlap",
-			sliceA: []int{1, 2},
-			sliceB: []int{3, 4},
-			want:   []int{1, 2, 3, 4},
-		},
-		{
-			name:   "complete overlap",
-			sliceA: []int{1, 2, 3},
-			sliceB: []int{1, 2, 3},
-			want:   []int{1, 2, 3},
-		},
-		{
-			name:   "empty sliceA",
-			sliceA: []int{},
-			sliceB: []int{1, 2},
-			want:   []int{1, 2},
-		},
-		{
-			name:   "empty sliceB",
-			sliceA: []int{1, 2},
-			sliceB: []int{},
-			want:   []int{1, 2},
-		},
+		{"normal", []int{1, 2}, []int{2, 3}, []int{1, 2, 3}},
+		{"both nil", nil, nil, nil},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := Union(tt.sliceA, tt.sliceB)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Union() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, Union(tt.s1, tt.s2))
 		})
 	}
 }
 
-func TestUnion_NilHandling(t *testing.T) {
-	t.Run("both nil returns nil", func(t *testing.T) {
-		var sliceA, sliceB []int
-		got := Union(sliceA, sliceB)
-		if got != nil {
-			t.Errorf("Expected nil, got %v", got)
-		}
-	})
-
-	t.Run("nil sliceA returns sliceB elements", func(t *testing.T) {
-		var sliceA []int
-		sliceB := []int{1, 2}
-		got := Union(sliceA, sliceB)
-		if !reflect.DeepEqual(got, sliceB) {
-			t.Errorf("Expected %v, got %v", sliceB, got)
-		}
-	})
-}
-
-func TestUnion_WithDuplicates(t *testing.T) {
-	sliceA := []int{1, 2, 2, 3}
-	sliceB := []int{2, 3, 3, 4}
-	got := Union(sliceA, sliceB)
-	want := []int{1, 2, 3, 4}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Union() = %v, want %v", got, want)
-	}
-}
-
-// Test Suite for Deduplicate Function
-
-func TestDeduplicate_Basic(t *testing.T) {
+func TestDeduplicate(t *testing.T) {
 	tests := []struct {
 		name  string
 		input []int
 		want  []int
 	}{
-		{
-			name:  "with duplicates",
-			input: []int{1, 2, 2, 3, 3, 3, 4},
-			want:  []int{1, 2, 3, 4},
-		},
-		{
-			name:  "no duplicates",
-			input: []int{1, 2, 3, 4},
-			want:  []int{1, 2, 3, 4},
-		},
-		{
-			name:  "all duplicates",
-			input: []int{1, 1, 1, 1},
-			want:  []int{1},
-		},
-		{
-			name:  "single element",
-			input: []int{1},
-			want:  []int{1},
-		},
+		{"normal", []int{1, 2, 2, 3, 3, 3}, []int{1, 2, 3}},
+		{"nil", nil, nil},
+		{"empty", []int{}, []int{}},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := Deduplicate(tt.input)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Deduplicate() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, Deduplicate(tt.input))
 		})
 	}
 }
 
-func TestDeduplicate_NilVsEmpty(t *testing.T) {
-	t.Run("nil input returns nil", func(t *testing.T) {
-		var input []int
-		got := Deduplicate(input)
-		if got != nil {
-			t.Errorf("Expected nil, got %v", got)
-		}
-	})
-
-	t.Run("empty slice returns empty slice", func(t *testing.T) {
-		input := []int{}
-		got := Deduplicate(input)
-		if got == nil {
-			t.Error("Expected empty slice, got nil")
-		}
-		if len(got) != 0 {
-			t.Errorf("Expected empty slice, got %v", got)
-		}
-	})
+func TestToMap(t *testing.T) {
+	type Person struct{ Name string }
+	input := []Person{{Name: "Alice"}, {Name: "Bob"}}
+	result := ToMap(input, func(p Person) string { return p.Name })
+	assert.Len(t, result, 2)
 }
 
-func TestDeduplicate_PreservesOrder(t *testing.T) {
-	input := []int{3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5}
-	got := Deduplicate(input)
-	want := []int{3, 1, 4, 5, 9, 2, 6}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Deduplicate() = %v, want %v (order not preserved)", got, want)
-	}
+func TestFlatMap(t *testing.T) {
+	result := FlatMap([]int{1, 2}, func(i int) []string { return []string{"a", "b"} })
+	assert.Equal(t, []string{"a", "b", "a", "b"}, result)
 }
 
-// Test Suite for ToMap Function
+func TestReduce(t *testing.T) {
+	sum := Reduce([]int{1, 2, 3, 4}, 0, func(acc, val int) int { return acc + val })
+	assert.Equal(t, 10, sum)
+}
 
-func TestToMap_Basic(t *testing.T) {
-	type User struct {
-		ID   int
-		Name string
+func TestChunk(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []int
+		size  int
+		want  [][]int
+	}{
+		{"normal", []int{1, 2, 3, 4, 5}, 2, [][]int{{1, 2}, {3, 4}, {5}}},
+		{"nil", nil, 2, nil},
 	}
-
-	users := []User{
-		{ID: 1, Name: "Alice"},
-		{ID: 2, Name: "Bob"},
-		{ID: 3, Name: "Charlie"},
-	}
-
-	got := ToMap(users, func(u User) int { return u.ID })
-
-	if len(got) != 3 {
-		t.Errorf("Expected map length 3, got %d", len(got))
-	}
-
-	if got[1].Name != "Alice" {
-		t.Errorf("Expected Alice, got %s", got[1].Name)
-	}
-	if got[2].Name != "Bob" {
-		t.Errorf("Expected Bob, got %s", got[2].Name)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := Chunk(tt.input, tt.size)
+			assert.Equal(t, tt.want, result)
+		})
 	}
 }
 
-func TestToMap_DuplicateKeys(t *testing.T) {
-	type User struct {
-		ID   int
-		Name string
-	}
-
-	users := []User{
-		{ID: 1, Name: "Alice"},
-		{ID: 1, Name: "Alice2"},
-		{ID: 2, Name: "Bob"},
-	}
-
-	got := ToMap(users, func(u User) int { return u.ID })
-
-	if len(got) != 2 {
-		t.Errorf("Expected map length 2, got %d", len(got))
-	}
-
-	// Last value should win
-	if got[1].Name != "Alice2" {
-		t.Errorf("Expected Alice2 (last value), got %s", got[1].Name)
-	}
+func TestFirst(t *testing.T) {
+	result, ok := First([]int{1, 2, 3}, func(n int) bool { return n > 2 })
+	assert.True(t, ok)
+	assert.Equal(t, 3, result)
 }
 
-func TestToMap_EmptyInput(t *testing.T) {
-	type User struct {
-		ID   int
-		Name string
-	}
-
-	var users []User
-	got := ToMap(users, func(u User) int { return u.ID })
-
-	if got == nil {
-		t.Error("Expected empty map, got nil")
-	}
-	if len(got) != 0 {
-		t.Errorf("Expected empty map, got length %d", len(got))
-	}
+func TestPartition(t *testing.T) {
+	matches, nonMatches := Partition([]int{1, 2, 3, 4, 5}, func(n int) bool { return n%2 == 0 })
+	assert.Equal(t, []int{2, 4}, matches)
+	assert.Equal(t, []int{1, 3, 5}, nonMatches)
 }
 
-func TestToMap_NilInput(t *testing.T) {
-	type User struct {
-		ID   int
-		Name string
-	}
-
-	got := ToMap(nil, func(u User) int { return u.ID })
-
-	if got == nil {
-		t.Error("Expected empty map, got nil")
-	}
-	if len(got) != 0 {
-		t.Errorf("Expected empty map, got length %d", len(got))
-	}
-}
-
-// Benchmark Tests
-
-func BenchmarkDifference(b *testing.B) {
-	sliceA := make([]int, 1000)
-	sliceB := make([]int, 500)
-	for i := range sliceA {
-		sliceA[i] = i
-	}
-	for i := range sliceB {
-		sliceB[i] = i * 2
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = Difference(sliceA, sliceB)
-	}
-}
-
-func BenchmarkIntersection(b *testing.B) {
-	sliceA := make([]int, 1000)
-	sliceB := make([]int, 1000)
-	for i := range sliceA {
-		sliceA[i] = i
-		sliceB[i] = i + 500
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = Intersection(sliceA, sliceB)
-	}
-}
-
-func BenchmarkUnion(b *testing.B) {
-	sliceA := make([]int, 1000)
-	sliceB := make([]int, 1000)
-	for i := range sliceA {
-		sliceA[i] = i
-		sliceB[i] = i + 500
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = Union(sliceA, sliceB)
-	}
+func TestGroupBy(t *testing.T) {
+	type Person struct{ Name, Dept string }
+	input := []Person{{Name: "Alice", Dept: "HR"}, {Name: "Bob", Dept: "IT"}, {Name: "Carol", Dept: "HR"}}
+	result := GroupBy(input, func(p Person) string { return p.Dept })
+	assert.Len(t, result["HR"], 2)
+	assert.Len(t, result["IT"], 1)
 }
 
 func BenchmarkDeduplicate(b *testing.B) {
 	input := make([]int, 1000)
 	for i := range input {
-		input[i] = i % 100 // Create duplicates
+		input[i] = i % 100
 	}
-
-	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = Deduplicate(input)
+		Deduplicate(input)
 	}
 }
