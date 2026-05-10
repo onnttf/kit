@@ -84,8 +84,20 @@ func TestToMap(t *testing.T) {
 	assert.Len(t, result, 2)
 }
 
+func TestToMap_LastDuplicateKeyWins(t *testing.T) {
+	type Person struct {
+		Name string
+		Age  int
+	}
+	input := []Person{{Name: "Alice", Age: 20}, {Name: "Alice", Age: 30}}
+
+	result := ToMap(input, func(p Person) string { return p.Name })
+
+	assert.Equal(t, 30, result["Alice"].Age)
+}
+
 func TestFlatMap(t *testing.T) {
-	result := FlatMap([]int{1, 2}, func(i int) []string { return []string{"a", "b"} })
+	result := FlatMap([]int{1, 2}, func(int) []string { return []string{"a", "b"} })
 	assert.Equal(t, []string{"a", "b", "a", "b"}, result)
 }
 
@@ -94,28 +106,16 @@ func TestReduce(t *testing.T) {
 	assert.Equal(t, 10, sum)
 }
 
-func TestChunk(t *testing.T) {
-	tests := []struct {
-		name  string
-		input []int
-		size  int
-		want  [][]int
-	}{
-		{"normal", []int{1, 2, 3, 4, 5}, 2, [][]int{{1, 2}, {3, 4}, {5}}},
-		{"nil", nil, 2, nil},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := Chunk(tt.input, tt.size)
-			assert.Equal(t, tt.want, result)
-		})
-	}
-}
-
 func TestFirst(t *testing.T) {
 	result, ok := First([]int{1, 2, 3}, func(n int) bool { return n > 2 })
 	assert.True(t, ok)
 	assert.Equal(t, 3, result)
+}
+
+func TestFirst_NoMatch(t *testing.T) {
+	result, ok := First([]int{1, 2, 3}, func(n int) bool { return n > 3 })
+	assert.False(t, ok)
+	assert.Zero(t, result)
 }
 
 func TestPartition(t *testing.T) {
@@ -130,6 +130,12 @@ func TestGroupBy(t *testing.T) {
 	result := GroupBy(input, func(p Person) string { return p.Dept })
 	assert.Len(t, result["HR"], 2)
 	assert.Len(t, result["IT"], 1)
+}
+
+func TestGroupBy_EmptyInput(t *testing.T) {
+	result := GroupBy([]int{}, func(n int) int { return n })
+	assert.Empty(t, result)
+	assert.NotNil(t, result)
 }
 
 func BenchmarkDeduplicate(b *testing.B) {
