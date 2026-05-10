@@ -5,17 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
-
-func TestParseInLocation(t *testing.T) {
-	loc := time.UTC
-	result, err := ParseInLocation("2006-01-02", "2024-03-15", loc)
-	require.NoError(t, err)
-	assert.Equal(t, 2024, result.Year())
-	assert.Equal(t, time.March, result.Month())
-	assert.Equal(t, 15, result.Day())
-}
 
 func TestStartOfDay(t *testing.T) {
 	tests := []struct {
@@ -46,6 +36,14 @@ func TestStartOfDay(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestDayBoundaries_PreserveLocation(t *testing.T) {
+	loc := time.FixedZone("UTC+8", 8*60*60)
+	input := time.Date(2024, 3, 15, 14, 30, 45, 0, loc)
+
+	assert.Same(t, loc, StartOfDay(input).Location())
+	assert.Same(t, loc, EndOfDay(input).Location())
 }
 
 func TestEndOfDay(t *testing.T) {
@@ -89,37 +87,37 @@ func TestStartOfWeek(t *testing.T) {
 	}{
 		{
 			name:     "monday",
-			input:    time.Date(2024, 3, 11, 14, 0, 0, 0, loc), // Monday
+			input:    time.Date(2024, 3, 11, 14, 0, 0, 0, loc),
 			expected: time.Date(2024, 3, 11, 0, 0, 0, 0, loc),
 		},
 		{
 			name:     "tuesday",
-			input:    time.Date(2024, 3, 12, 14, 0, 0, 0, loc), // Tuesday
+			input:    time.Date(2024, 3, 12, 14, 0, 0, 0, loc),
 			expected: time.Date(2024, 3, 11, 0, 0, 0, 0, loc),
 		},
 		{
 			name:     "wednesday",
-			input:    time.Date(2024, 3, 13, 14, 0, 0, 0, loc), // Wednesday
+			input:    time.Date(2024, 3, 13, 14, 0, 0, 0, loc),
 			expected: time.Date(2024, 3, 11, 0, 0, 0, 0, loc),
 		},
 		{
 			name:     "thursday",
-			input:    time.Date(2024, 3, 14, 14, 0, 0, 0, loc), // Thursday
+			input:    time.Date(2024, 3, 14, 14, 0, 0, 0, loc),
 			expected: time.Date(2024, 3, 11, 0, 0, 0, 0, loc),
 		},
 		{
 			name:     "friday",
-			input:    time.Date(2024, 3, 15, 14, 0, 0, 0, loc), // Friday
+			input:    time.Date(2024, 3, 15, 14, 0, 0, 0, loc),
 			expected: time.Date(2024, 3, 11, 0, 0, 0, 0, loc),
 		},
 		{
 			name:     "saturday",
-			input:    time.Date(2024, 3, 16, 14, 0, 0, 0, loc), // Saturday
+			input:    time.Date(2024, 3, 16, 14, 0, 0, 0, loc),
 			expected: time.Date(2024, 3, 11, 0, 0, 0, 0, loc),
 		},
 		{
 			name:     "sunday",
-			input:    time.Date(2024, 3, 17, 14, 0, 0, 0, loc), // Sunday
+			input:    time.Date(2024, 3, 17, 14, 0, 0, 0, loc),
 			expected: time.Date(2024, 3, 11, 0, 0, 0, 0, loc),
 		},
 	}
@@ -142,12 +140,12 @@ func TestEndOfWeek(t *testing.T) {
 	}{
 		{
 			name:     "monday",
-			input:    time.Date(2024, 3, 11, 14, 0, 0, 0, loc), // Monday
+			input:    time.Date(2024, 3, 11, 14, 0, 0, 0, loc),
 			expected: time.Date(2024, 3, 17, 23, 59, 59, 999999999, loc),
 		},
 		{
 			name:     "sunday",
-			input:    time.Date(2024, 3, 17, 14, 0, 0, 0, loc), // Sunday
+			input:    time.Date(2024, 3, 17, 14, 0, 0, 0, loc),
 			expected: time.Date(2024, 3, 17, 23, 59, 59, 999999999, loc),
 		},
 	}
@@ -209,12 +207,12 @@ func TestEndOfMonth(t *testing.T) {
 		},
 		{
 			name:     "february leap year",
-			input:    time.Date(2024, 2, 15, 14, 0, 0, 0, time.UTC), // 2024 is leap year
+			input:    time.Date(2024, 2, 15, 14, 0, 0, 0, time.UTC),
 			expected: time.Date(2024, 2, 29, 23, 59, 59, 999999999, time.UTC),
 		},
 		{
 			name:     "february non-leap year",
-			input:    time.Date(2023, 2, 15, 14, 0, 0, 0, time.UTC), // 2023 is not leap year
+			input:    time.Date(2023, 2, 15, 14, 0, 0, 0, time.UTC),
 			expected: time.Date(2023, 2, 28, 23, 59, 59, 999999999, time.UTC),
 		},
 	}

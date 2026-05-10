@@ -1,25 +1,18 @@
 package time
 
-import (
-	"time"
-)
+import "time"
 
-// ParseInLocation parses a time string in the specified location.
-func ParseInLocation(layout, value string, location *time.Location) (time.Time, error) {
-	return time.ParseInLocation(layout, value, location)
-}
-
-// StartOfDay returns the start of day (00:00:00) for t.
+// StartOfDay returns midnight at the start of t's day in t's location.
 func StartOfDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
 
-// EndOfDay returns the end of day (23:59:59.999999999) for t.
+// EndOfDay returns the final nanosecond of t's day in t's location.
 func EndOfDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
 }
 
-// StartOfWeek returns the start of the week (Monday) for t.
+// StartOfWeek returns the Monday of t's week in t's location.
 func StartOfWeek(t time.Time) time.Time {
 	weekday := int(t.Weekday())
 	if weekday == 0 {
@@ -28,7 +21,7 @@ func StartOfWeek(t time.Time) time.Time {
 	return StartOfDay(t.AddDate(0, 0, -(weekday - 1)))
 }
 
-// EndOfWeek returns the end of the week (Sunday) for t.
+// EndOfWeek returns the Sunday of t's week in t's location.
 func EndOfWeek(t time.Time) time.Time {
 	weekday := int(t.Weekday())
 	if weekday == 0 {
@@ -37,33 +30,33 @@ func EndOfWeek(t time.Time) time.Time {
 	return EndOfDay(t.AddDate(0, 0, 7-weekday))
 }
 
-// StartOfMonth returns the start of the month for t.
+// StartOfMonth returns the first day of t's month at midnight in t's location.
 func StartOfMonth(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
 }
 
-// EndOfMonth returns the end of the month for t.
+// EndOfMonth returns the final nanosecond of t's month in t's location.
 func EndOfMonth(t time.Time) time.Time {
 	return EndOfDay(StartOfMonth(t).AddDate(0, 1, -1))
 }
 
-// StartOfYear returns the start of the year for t.
+// StartOfYear returns January 1 of t's year at midnight in t's location.
 func StartOfYear(t time.Time) time.Time {
 	return time.Date(t.Year(), 1, 1, 0, 0, 0, 0, t.Location())
 }
 
-// EndOfYear returns the end of the year for t.
+// EndOfYear returns the final nanosecond of t's year in t's location.
 func EndOfYear(t time.Time) time.Time {
 	return EndOfDay(time.Date(t.Year(), 12, 31, 0, 0, 0, 0, t.Location()))
 }
 
-// IsWeekend reports whether t falls on a Saturday or Sunday.
+// IsWeekend reports whether t falls on Saturday or Sunday.
 func IsWeekend(t time.Time) bool {
 	weekday := t.Weekday()
 	return weekday == time.Saturday || weekday == time.Sunday
 }
 
-// IsWeekday reports whether t falls on a weekday (Monday-Friday).
+// IsWeekday reports whether t falls on Monday through Friday.
 func IsWeekday(t time.Time) bool {
 	return !IsWeekend(t)
 }

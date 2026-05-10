@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTo(t *testing.T) {
@@ -48,7 +49,7 @@ func TestDerefOr(t *testing.T) {
 	})
 
 	t.Run("nil pointer", func(t *testing.T) {
-		var val *int = nil
+		var val *int
 		result := DerefOr(val, 100)
 		assert.Equal(t, 100, result)
 	})
@@ -60,7 +61,7 @@ func TestDerefOr(t *testing.T) {
 	})
 
 	t.Run("nil string pointer", func(t *testing.T) {
-		var str *string = nil
+		var str *string
 		result := DerefOr(str, "default")
 		assert.Equal(t, "default", result)
 	})
@@ -88,39 +89,13 @@ func TestToIf(t *testing.T) {
 		result := ToIf(false, "hello")
 		assert.Nil(t, result)
 	})
-}
 
-func TestIsNil(t *testing.T) {
-	t.Run("nil pointer", func(t *testing.T) {
-		var val *int = nil
-		assert.True(t, IsNil(val))
-	})
-
-	t.Run("non-nil pointer", func(t *testing.T) {
-		val := 42
-		assert.False(t, IsNil(&val))
-	})
-
-	t.Run("nil string pointer", func(t *testing.T) {
-		var str *string = nil
-		assert.True(t, IsNil(str))
-	})
-}
-
-func TestIsNotNil(t *testing.T) {
-	t.Run("nil pointer", func(t *testing.T) {
-		var val *int = nil
-		assert.False(t, IsNotNil(val))
-	})
-
-	t.Run("non-nil pointer", func(t *testing.T) {
-		val := 42
-		assert.True(t, IsNotNil(&val))
-	})
-
-	t.Run("nil string pointer", func(t *testing.T) {
-		var str *string = nil
-		assert.False(t, IsNotNil(str))
+	t.Run("returns copy", func(t *testing.T) {
+		val := 7
+		result := ToIf(true, val)
+		require.NotNil(t, result)
+		*result = 9
+		assert.Equal(t, 7, val)
 	})
 }
 
@@ -174,7 +149,7 @@ func TestDeref(t *testing.T) {
 	})
 
 	t.Run("nil pointer", func(t *testing.T) {
-		var val *int = nil
+		var val *int
 		result := Deref(val)
 		assert.Equal(t, 0, result)
 	})
@@ -186,7 +161,7 @@ func TestDeref(t *testing.T) {
 	})
 
 	t.Run("nil string pointer", func(t *testing.T) {
-		var str *string = nil
+		var str *string
 		result := Deref(str)
 		assert.Equal(t, "", result)
 	})
@@ -206,7 +181,7 @@ func TestDeref(t *testing.T) {
 			Name string
 			Age  int
 		}
-		var person *Person = nil
+		var person *Person
 		result := Deref(person)
 		assert.Equal(t, Person{}, result)
 	})
@@ -258,7 +233,7 @@ func TestDerefOr_Generics(t *testing.T) {
 	})
 
 	t.Run("nil float64", func(t *testing.T) {
-		var val *float64 = nil
+		var val *float64
 		result := DerefOr(val, 2.71)
 		assert.Equal(t, 2.71, result)
 	})
@@ -270,7 +245,7 @@ func TestDerefOr_Generics(t *testing.T) {
 	})
 
 	t.Run("nil bool", func(t *testing.T) {
-		var val *bool = nil
+		var val *bool
 		result := DerefOr(val, true)
 		assert.Equal(t, true, result)
 	})
@@ -290,7 +265,7 @@ func BenchmarkDerefOr_NonNil(b *testing.B) {
 }
 
 func BenchmarkDerefOr_Nil(b *testing.B) {
-	var val *int = nil
+	var val *int
 	for i := 0; i < b.N; i++ {
 		DerefOr(val, 0)
 	}
@@ -310,7 +285,7 @@ func BenchmarkDeref_NonNil(b *testing.B) {
 }
 
 func BenchmarkDeref_Nil(b *testing.B) {
-	var val *int = nil
+	var val *int
 	for i := 0; i < b.N; i++ {
 		Deref(val)
 	}

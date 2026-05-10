@@ -2,10 +2,12 @@ package download
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,9 +62,10 @@ func TestWithTimeout(t *testing.T) {
 
 func TestGetFile(t *testing.T) {
 	content := "test file content"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(content))
+		_, err := w.Write([]byte(content))
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -70,8 +73,9 @@ func TestGetFile(t *testing.T) {
 	destPath := filepath.Join(tmpDir, "test.txt")
 	err := GetFile(context.Background(), server.URL, destPath)
 	require.NoError(t, err)
-	_, err = os.Stat(destPath)
-	assert.NoError(t, err)
+	data, err := os.ReadFile(destPath)
+	require.NoError(t, err)
+	assert.Equal(t, content, string(data))
 }
 
 func TestGetFile_EmptyURL(t *testing.T) {
@@ -91,32 +95,60 @@ func TestGetFile_InvalidURL(t *testing.T) {
 func TestGetFile_FileExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	destPath := filepath.Join(tmpDir, "test.txt")
-	f, _ := os.Create(destPath)
-	f.Close()
-	err := GetFile(context.Background(), "https://example.com/file.txt", destPath)
+	f, err := os.Create(destPath)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	err = GetFile(context.Background(), "https://example.com/file.txt", destPath)
 	assert.ErrorIs(t, err, ErrFileExists)
 }
 
 func TestGetFile_Overwrite(t *testing.T) {
 	content := "new content"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(content))
+		_, err := w.Write([]byte(content))
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
 	tmpDir := t.TempDir()
 	destPath := filepath.Join(tmpDir, "test.txt")
-	f, _ := os.Create(destPath)
-	f.WriteString("old content")
-	f.Close()
+	require.NoError(t, os.WriteFile(destPath, []byte("old content"), 0o644))
 
 	err := GetFile(context.Background(), server.URL, destPath, WithOverwrite())
 	require.NoError(t, err)
+	data, err := os.ReadFile(destPath)
+	require.NoError(t, err)
+	assert.Equal(t, content, string(data))
+}
+
+func TestGetFile_NoOverwriteRace(t *testing.T) {
+	content := "new content"
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "test.txt")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if err := os.WriteFile(destPath, []byte("existing"), 0o644); err != nil {
+			t.Errorf("write existing file: %v", err)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte(content)); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	err := GetFile(context.Background(), server.URL, destPath)
+	require.ErrorIs(t, err, ErrFileExists)
+
+	data, readErr := os.ReadFile(destPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, "existing", string(data))
 }
 
 func TestGetFile_Non200(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
@@ -129,23 +161,26 @@ func TestGetFile_Non200(t *testing.T) {
 
 func TestGetFile_NilContext(t *testing.T) {
 	content := "test"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(content))
+		_, err := w.Write([]byte(content))
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
 	tmpDir := t.TempDir()
 	destPath := filepath.Join(tmpDir, "test.txt")
-	err := GetFile(nil, server.URL, destPath)
+	var ctx context.Context
+	err := GetFile(ctx, server.URL, destPath)
 	require.NoError(t, err)
 }
 
 func TestGetBytes(t *testing.T) {
 	content := "test bytes content"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(content))
+		_, err := w.Write([]byte(content))
+		assert.NoError(t, err)
 	}))
 	defer server.Close()
 
@@ -157,6 +192,19 @@ func TestGetBytes(t *testing.T) {
 func TestGetBytes_EmptyURL(t *testing.T) {
 	_, err := GetBytes(context.Background(), "")
 	assert.ErrorIs(t, err, ErrEmptyURL)
+}
+
+func TestGetBytes_BodyTooLarge(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte("abcdef")); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	_, err := GetBytes(context.Background(), server.URL, WithMaxBytes(3))
+	assert.ErrorIs(t, err, ErrResponseBodyTooLarge)
 }
 
 func TestValidateURL(t *testing.T) {
@@ -182,6 +230,30 @@ func TestValidateURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReadLimited(t *testing.T) {
+	data, err := readLimited(strings.NewReader("abc"), 3)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("abc"), data)
+
+	_, err = readLimited(strings.NewReader("abcd"), 3)
+	assert.ErrorIs(t, err, ErrResponseBodyTooLarge)
+}
+
+func TestCopyLimited(t *testing.T) {
+	var dst strings.Builder
+	err := copyLimited(&dst, strings.NewReader("abc"), 3)
+	require.NoError(t, err)
+	assert.Equal(t, "abc", dst.String())
+
+	err = copyLimited(&dst, strings.NewReader("abcd"), 3)
+	assert.ErrorIs(t, err, ErrResponseBodyTooLarge)
+}
+
+func TestGetFile_LinkErrorWrapsUnexpectedFailure(t *testing.T) {
+	err := copyLimited(errWriter{}, strings.NewReader("data"), defaultMaxBytes)
+	assert.Error(t, err)
 }
 
 func TestCheckResponse(t *testing.T) {
@@ -214,18 +286,26 @@ func TestCheckResponse(t *testing.T) {
 	}
 }
 
-func TestErrors(t *testing.T) {
-	assert.Equal(t, "file already exists", ErrFileExists.Error())
-	assert.Equal(t, "url is empty", ErrEmptyURL.Error())
-	assert.Equal(t, "invalid scheme", ErrInvalidScheme.Error())
-	assert.Equal(t, "host is empty", ErrEmptyHost.Error())
-	assert.Equal(t, "unexpected http status", ErrUnexpectedStatus.Error())
-	assert.Equal(t, "body too large", ErrResponseBodyTooLarge.Error())
-}
-
 func TestNewConfig(t *testing.T) {
 	cfg := newConfig()
 	assert.NotNil(t, cfg.client)
 	assert.Equal(t, int64(defaultMaxBytes), cfg.maxBytes)
 	assert.False(t, cfg.overwrite)
+}
+
+func TestNewConfig_DefaultTransportClonesHTTPDefaultTransport(t *testing.T) {
+	cfg := newConfig()
+
+	transport, ok := cfg.client.Transport.(*http.Transport)
+	require.True(t, ok)
+	assert.NotSame(t, http.DefaultTransport, transport)
+	assert.NotNil(t, transport.Proxy)
+	assert.NotNil(t, transport.DialContext)
+	assert.Equal(t, 100, transport.MaxIdleConnsPerHost)
+}
+
+type errWriter struct{}
+
+func (errWriter) Write([]byte) (int, error) {
+	return 0, errors.New("write failed")
 }

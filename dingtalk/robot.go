@@ -12,39 +12,36 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"time"
-
 	"sync"
+	"time"
 )
 
 var getDefaultClient = sync.OnceValue(func() *http.Client {
 	return &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			MaxIdleConnsPerHost: 100,
-		},
+		Timeout:   5 * time.Second,
+		Transport: defaultTransport(),
 	}
 })
 
-// Robot is the client for sending messages to DingTalk.
+// Robot sends messages to a DingTalk robot webhook.
 type Robot struct {
 	accessToken string
 	secret      string
 	httpClient  *http.Client
 }
 
-// NewRobot creates a Robot instance with the given access token.
+// NewRobot creates a DingTalk robot client for accessToken.
 func NewRobot(accessToken string) *Robot {
 	return &Robot{accessToken: accessToken, httpClient: getDefaultClient()}
 }
 
-// WithSecret sets the secret for signature verification.
+// WithSecret sets the robot signing secret.
 func (r *Robot) WithSecret(secret string) *Robot {
 	r.secret = secret
 	return r
 }
 
-// WithClient sets a custom HTTP client.
+// WithClient replaces the HTTP client used by the robot.
 func (r *Robot) WithClient(client *http.Client) *Robot {
 	if client != nil {
 		r.httpClient = client
@@ -52,17 +49,15 @@ func (r *Robot) WithClient(client *http.Client) *Robot {
 	return r
 }
 
-// Send posts the message payload to DingTalk using a default context with 5 second timeout.
-// For custom timeout or cancellation control, use SendWithContext instead.
+// Send posts msg using a background context with the default timeout.
 func (r *Robot) Send(msg Message) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return r.SendWithContext(ctx, msg)
 }
 
-// SendWithContext posts the message payload to DingTalk.
-// The context controls the entire HTTP request lifecycle.
-func (r *Robot) SendWithContext(ctx context.Context, msg Message) error {
+// SendWithContext posts msg and lets ctx control request cancellation.
+func (r *Robot) SendWithContext(ctx context.Context, msg Message) (err error) {
 	if r.accessToken == "" {
 		return errors.New("access token is empty")
 	}
@@ -101,7 +96,11 @@ func (r *Robot) SendWithContext(ctx context.Context, msg Message) error {
 	if err != nil {
 		return fmt.Errorf("send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("close response body: %w", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -124,11 +123,19 @@ func (r *Robot) SendWithContext(ctx context.Context, msg Message) error {
 	return nil
 }
 
-// calculateSign generates the DingTalk message signature.
 func (r *Robot) calculateSign(timestamp int64) (string, error) {
 	stringToSign := fmt.Sprintf("%d\n%s", timestamp, r.secret)
 	h := hmac.New(sha256.New, []byte(r.secret))
 	h.Write([]byte(stringToSign))
 	sign := base64.StdEncoding.EncodeToString(h.Sum(nil))
 	return url.QueryEscape(sign), nil
+}
+
+func defaultTransport() *http.Transport {
+	if transport, ok := http.DefaultTransport.(*http.Transport); ok {
+		clone := transport.Clone()
+		clone.MaxIdleConnsPerHost = 100
+		return clone
+	}
+	return &http.Transport{MaxIdleConnsPerHost: 100}
 }
