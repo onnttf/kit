@@ -9,6 +9,11 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+type Person struct {
+	Name string `excel:"A"`
+	Age  int    `excel:"B"`
+}
+
 func TestIsXLSX(t *testing.T) {
 	tests := []struct {
 		filename string
@@ -27,31 +32,6 @@ func TestIsXLSX(t *testing.T) {
 	}
 }
 
-func createTestExcelFile(t testing.TB) string {
-	f := excelize.NewFile()
-	defer f.Close()
-
-	sheet, _ := f.NewSheet("Test")
-	f.SetActiveSheet(sheet)
-
-	_ = f.SetCellValue("Test", "A1", "Name")
-	_ = f.SetCellValue("Test", "B1", "Age")
-	_ = f.SetCellValue("Test", "A2", "Alice")
-	_ = f.SetCellValue("Test", "B2", 25)
-
-	tmpDir := t.TempDir()
-	tmpFile := filepath.Join(tmpDir, "test.xlsx")
-	err := f.SaveAs(tmpFile)
-	require.NoError(t, err)
-
-	return tmpFile
-}
-
-type Person struct {
-	Name string `excel:"A"`
-	Age  int    `excel:"B"`
-}
-
 func TestParse(t *testing.T) {
 	t.Run("valid row", func(t *testing.T) {
 		row := []string{"Alice", "25"}
@@ -67,6 +47,80 @@ func TestParse(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "Alice", result.Name)
 		assert.Equal(t, 0, result.Age)
+	})
+
+	t.Run("invalid int", func(t *testing.T) {
+		_, err := Parse[Person]([]string{"Alice", "not-an-int"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "column B")
+	})
+
+	t.Run("pointer field", func(t *testing.T) {
+		type record struct {
+			Age *int `excel:"A"`
+		}
+
+		result, err := Parse[record]([]string{"42"})
+		require.NoError(t, err)
+		require.NotNil(t, result.Age)
+		assert.Equal(t, 42, *result.Age)
+
+		result, err = Parse[record]([]string{""})
+		require.NoError(t, err)
+		assert.Nil(t, result.Age)
+	})
+
+	t.Run("non struct type", func(t *testing.T) {
+		_, err := Parse[int]([]string{"1"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "struct")
+	})
+
+	t.Run("unsupported pointer shape", func(t *testing.T) {
+		_, err := Parse[**Person]([]string{"Alice", "25"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "struct")
+	})
+
+	t.Run("invalid field target", func(t *testing.T) {
+		type record struct {
+			name string `excel:"A"`
+		}
+
+		assert.Empty(t, record{}.name)
+		_, err := Parse[record]([]string{"Alice"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unexported")
+	})
+
+	t.Run("unsupported field type", func(t *testing.T) {
+		type record struct {
+			Values []string `excel:"A"`
+		}
+
+		_, err := Parse[record]([]string{"a,b"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported type")
+	})
+
+	t.Run("numeric overflow", func(t *testing.T) {
+		type record struct {
+			Int   int8    `excel:"A"`
+			Uint  uint8   `excel:"B"`
+			Float float32 `excel:"C"`
+		}
+
+		_, err := Parse[record]([]string{"128", "1", "1"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "overflows")
+
+		_, err = Parse[record]([]string{"1", "256", "1"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "overflows")
+
+		_, err = Parse[record]([]string{"1", "1", "3.5e38"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "overflows")
 	})
 }
 
@@ -89,7 +143,9 @@ func TestWorkbook_Sheets(t *testing.T) {
 	filePath := createTestExcelFile(t)
 	wb, err := Open(filePath)
 	require.NoError(t, err)
-	defer wb.Close()
+	defer func() {
+		require.NoError(t, wb.Close())
+	}()
 	sheets := wb.Sheets()
 	assert.Contains(t, sheets, "Test")
 }
@@ -98,13 +154,18 @@ func TestWorkbook_Sheet(t *testing.T) {
 	filePath := createTestExcelFile(t)
 	wb, err := Open(filePath)
 	require.NoError(t, err)
-	defer wb.Close()
+	defer func() {
+		require.NoError(t, wb.Close())
+	}()
 	sheet := wb.Sheet("Test")
 	assert.NotNil(t, sheet)
 }
 
 func TestRow_Values(t *testing.T) {
 	row := &Row{values: []string{"a", "b", "c"}}
+	values := row.Values()
+	values[0] = "changed"
+
 	assert.Equal(t, []string{"a", "b", "c"}, row.Values())
 }
 
@@ -176,9 +237,38 @@ func TestScanAll(t *testing.T) {
 	assert.Len(t, result, 2)
 }
 
+func TestScanAll_ReturnsScanError(t *testing.T) {
+	filePath := createTestExcelFile(t)
+	_, err := ScanAll[Person](filePath, "Missing")
+	require.Error(t, err)
+}
+
 func BenchmarkParse(b *testing.B) {
 	row := []string{"Alice", "25"}
 	for i := 0; i < b.N; i++ {
 		_, _ = Parse[Person](row)
 	}
+}
+
+func createTestExcelFile(t testing.TB) string {
+	f := excelize.NewFile()
+	defer func() {
+		require.NoError(t, f.Close())
+	}()
+
+	sheet, err := f.NewSheet("Test")
+	require.NoError(t, err)
+	f.SetActiveSheet(sheet)
+
+	require.NoError(t, f.SetCellValue("Test", "A1", "Name"))
+	require.NoError(t, f.SetCellValue("Test", "B1", "Age"))
+	require.NoError(t, f.SetCellValue("Test", "A2", "Alice"))
+	require.NoError(t, f.SetCellValue("Test", "B2", 25))
+
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "test.xlsx")
+	err = f.SaveAs(tmpFile)
+	require.NoError(t, err)
+
+	return tmpFile
 }

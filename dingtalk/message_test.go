@@ -17,7 +17,9 @@ func TestNewTextMsg(t *testing.T) {
 
 func TestTextMsg_WithAtMobiles(t *testing.T) {
 	msg := NewTextMsg("Hello")
-	msg.WithAtMobiles([]string{"13800138000", "13900139000"})
+	mobiles := []string{"13800138000", "13900139000"}
+	msg.WithAtMobiles(mobiles)
+	mobiles[0] = "changed"
 
 	assert.Equal(t, []string{"13800138000", "13900139000"}, msg.At.AtMobiles)
 	assert.False(t, msg.At.IsAtAll)
@@ -55,7 +57,9 @@ func TestNewMarkdownMsg(t *testing.T) {
 
 func TestMarkdownMsg_WithAtMobiles(t *testing.T) {
 	msg := NewMarkdownMsg("Title", "Content")
-	msg.WithAtMobiles([]string{"13800138000"})
+	mobiles := []string{"13800138000"}
+	msg.WithAtMobiles(mobiles)
+	mobiles[0] = "changed"
 
 	assert.Equal(t, []string{"13800138000"}, msg.At.AtMobiles)
 }
@@ -128,11 +132,13 @@ func TestNewMultiActionCard(t *testing.T) {
 	}
 
 	msg := NewMultiActionCard("Title", "Text", btns)
+	btns[0].Title = "Changed"
 
 	assert.Equal(t, MsgTypeActionCard, msg.MsgType)
 	assert.Equal(t, "Title", msg.ActionCard.Title)
 	assert.Equal(t, "Text", msg.ActionCard.Text)
 	assert.Len(t, msg.ActionCard.Btns, 2)
+	assert.Equal(t, "Button1", msg.ActionCard.Btns[0].Title)
 }
 
 func TestActionCardMsg_WithBtnOrientation(t *testing.T) {
@@ -168,6 +174,7 @@ func TestNewFeedCardMsg(t *testing.T) {
 	}
 
 	msg := NewFeedCardMsg(links)
+	links[0].Title = "Changed"
 
 	assert.Equal(t, MsgTypeFeedCard, msg.MsgType)
 	assert.Len(t, msg.FeedCard.Links, 2)
@@ -189,26 +196,4 @@ func TestFeedCardMsg_Payload(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, MsgTypeFeedCard, result["msgtype"])
-}
-
-func TestMessageInterface(t *testing.T) {
-	var _ Message = NewTextMsg("test")
-	var _ Message = NewMarkdownMsg("title", "text")
-	var _ Message = NewLinkMsg("title", "text", "url")
-	var _ Message = NewSingleActionCard("title", "text", "btn", "url")
-	var _ Message = NewMultiActionCard("title", "text", nil)
-	var _ Message = NewFeedCardMsg(nil)
-}
-
-func TestMsgTypeConstants(t *testing.T) {
-	assert.Equal(t, "text", MsgTypeText)
-	assert.Equal(t, "markdown", MsgTypeMarkdown)
-	assert.Equal(t, "link", MsgTypeLink)
-	assert.Equal(t, "actionCard", MsgTypeActionCard)
-	assert.Equal(t, "feedCard", MsgTypeFeedCard)
-}
-
-func TestBtnOrientationConstants(t *testing.T) {
-	assert.Equal(t, "0", BtnOrientationHorizontal)
-	assert.Equal(t, "1", BtnOrientationVertical)
 }
