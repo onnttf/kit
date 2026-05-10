@@ -2,51 +2,51 @@ package concurrent
 
 import "time"
 
-// ErrorSample records a single error occurrence.
+// ErrorSample records one sampled item error.
 type ErrorSample struct {
-	Error     error     // the error.
-	TaskID    int       // ID of the failed task.
-	Attempt   int       // retry attempt when error occurred.
-	Timestamp time.Time // when the error occurred.
+	Error     error
+	TaskID    int
+	Attempt   int
+	Timestamp time.Time
 }
 
-// AbortReason describes why execution was aborted.
+// AbortReason records the item that caused executor abortion.
 type AbortReason struct {
-	TaskID  int       // ID of the task that caused abort.
-	Attempt int       // retry attempt when abort occurred.
-	Error   error     // the error that triggered abort.
-	Time    time.Time // when abort was triggered.
+	TaskID  int
+	Attempt int
+	Error   error
+	Time    time.Time
 }
 
-// Result contains execution statistics.
+// Result summarizes an executor run.
 type Result struct {
-	Total     int // total items to process.
-	Success   int // successfully processed items.
-	Failed    int // failed items (after retries).
-	Retried   int // total retry attempts.
-	Cancelled int // cancelled items.
+	Total     int
+	Success   int
+	Failed    int
+	Retried   int
+	Cancelled int
 
-	Aborted     bool         // whether execution was aborted.
-	AbortReason *AbortReason // abort details.
+	Aborted     bool
+	AbortReason *AbortReason
 
-	StartTime time.Time // execution start time.
-	EndTime   time.Time // execution end time.
+	StartTime time.Time
+	EndTime   time.Time
 
-	ErrorSamples []ErrorSample  // error samples.
-	ErrorCount   map[string]int // count per error message.
+	ErrorSamples []ErrorSample
+	ErrorCount   map[string]int
 }
 
-// Duration returns the total execution duration.
+// Duration returns the elapsed time between StartTime and EndTime.
 func (r *Result) Duration() time.Duration {
 	return r.EndTime.Sub(r.StartTime)
 }
 
-// HasErrors reports whether there were any failures.
+// HasErrors reports whether the run failed any item or aborted.
 func (r *Result) HasErrors() bool {
 	return r.Failed > 0 || r.Aborted
 }
 
-// SuccessRate returns the success rate as a percentage (0-100).
+// SuccessRate returns the percentage of successful items.
 func (r *Result) SuccessRate() float64 {
 	if r.Total == 0 {
 		return 0
@@ -54,7 +54,7 @@ func (r *Result) SuccessRate() float64 {
 	return float64(r.Success) / float64(r.Total) * 100
 }
 
-// IsComplete reports whether all items were processed.
+// IsComplete reports whether all queued items reached a terminal state.
 func (r *Result) IsComplete() bool {
 	return (r.Success + r.Failed + r.Cancelled) == r.Total
 }

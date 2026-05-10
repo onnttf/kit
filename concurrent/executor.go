@@ -13,7 +13,7 @@ const (
 	workChannelBufferMultiplier = 2
 )
 
-// ErrExecutorReused is returned when attempting to reuse an Executor.
+// ErrExecutorReused is returned when Run or RunStream is called more than once.
 var ErrExecutorReused = errors.New("executor already used")
 
 type execCounters struct {
@@ -27,8 +27,7 @@ type errorCounter struct {
 	count atomic.Int64
 }
 
-// An Executor runs tasks concurrently with retry and error handling.
-// Each Executor should be used only once for Run or RunStream.
+// Executor runs items once with bounded concurrency and configured failure policies.
 type Executor[T any] struct {
 	config Config[T]
 
@@ -44,9 +43,7 @@ type Executor[T any] struct {
 	used atomic.Bool
 }
 
-// New returns a new Executor with the given config.
-// Each Executor should be used only once for Run or RunStream.
-// To process multiple batches, create a new Executor for each.
+// New validates config, applies defaults, and returns a single-use executor.
 func New[T any](config Config[T]) (*Executor[T], error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
@@ -57,10 +54,14 @@ func New[T any](config Config[T]) (*Executor[T], error) {
 	return &Executor[T]{config: config}, nil
 }
 
-// Run processes items concurrently.
+// Run processes items with bounded concurrency and returns a summary.
+// A nil context is treated as context.Background.
 func (e *Executor[T]) Run(ctx context.Context, items []T, handler Handler[T]) (*Result, error) {
 	if !e.used.CompareAndSwap(false, true) {
 		return nil, ErrExecutorReused
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	start := time.Now()
@@ -109,9 +110,8 @@ func (e *Executor[T]) Run(ctx context.Context, items []T, handler Handler[T]) (*
 	return result, nil
 }
 
-// RunStream processes items from a channel concurrently.
-// The input channel should be closed by the caller when done.
-// It is useful for streaming data where the total count is unknown.
+// RunStream processes items from in until the channel is closed or ctx is canceled.
+// The result total counts items successfully queued for workers.
 func (e *Executor[T]) RunStream(
 	ctx context.Context,
 	in <-chan T,
@@ -119,6 +119,9 @@ func (e *Executor[T]) RunStream(
 ) (*Result, error) {
 	if !e.used.CompareAndSwap(false, true) {
 		return nil, ErrExecutorReused
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	start := time.Now()
@@ -152,11 +155,11 @@ func (e *Executor[T]) RunStream(
 				if !ok {
 					return
 				}
-				count.Add(1)
 				select {
 				case <-ctx.Done():
 					return
 				case workCh <- workItem[T]{id: id, data: item}:
+					count.Add(1)
 					id++
 				}
 			}
@@ -283,10 +286,16 @@ func (e *Executor[T]) runWithRetry(
 
 			if e.config.Backoff != nil {
 				timer := time.NewTimer(e.config.Backoff(item.attempt))
-				defer timer.Stop()
 				select {
 				case <-timer.C:
 				case <-ctx.Done():
+					if !timer.Stop() {
+						select {
+						case <-timer.C:
+						default:
+						}
+					}
+					e.counters.cancelled.Add(1)
 					return
 				}
 			}

@@ -5,57 +5,53 @@ import (
 	"time"
 )
 
-// ConstantBackoff returns a BackoffFunc with constant delay.
+// ConstantBackoff returns the same delay for every retry attempt.
 func ConstantBackoff(delay time.Duration) BackoffFunc {
-	return func(attempt int) time.Duration {
+	return func(_ int) time.Duration {
 		return delay
 	}
 }
 
-// LinearBackoff returns a BackoffFunc with linear increase: delay = base * attempt.
+// LinearBackoff returns base multiplied by the retry attempt number.
 func LinearBackoff(base time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		return base * time.Duration(attempt)
 	}
 }
 
-// ExponentialBackoff returns a BackoffFunc with exponential increase.
-// delay = base * (2 ^ (attempt - 1)).
-// The max parameter caps the maximum delay.
-func ExponentialBackoff(base time.Duration, max time.Duration) BackoffFunc {
+// ExponentialBackoff returns an exponential delay capped by maxDelay when maxDelay is positive.
+func ExponentialBackoff(base time.Duration, maxDelay time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		if attempt <= 0 {
 			return 0
 		}
-		// Prevent overflow: cap at 62 to avoid float64 overflow (2^62 is safe)
+
 		if attempt > 62 {
 			attempt = 62
 		}
 		multiplier := math.Pow(2, float64(attempt-1))
 		delay := time.Duration(float64(base) * multiplier)
-		if max > 0 && delay > max {
-			return max
+		if maxDelay > 0 && delay > maxDelay {
+			return maxDelay
 		}
 		return delay
 	}
 }
 
-// FibonacciBackoff returns a BackoffFunc using Fibonacci sequence.
-// delay = base * fibonacci(attempt).
-// The max parameter caps the maximum delay.
-func FibonacciBackoff(base time.Duration, max time.Duration) BackoffFunc {
+// FibonacciBackoff returns a Fibonacci delay capped by maxDelay when maxDelay is positive.
+func FibonacciBackoff(base time.Duration, maxDelay time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		if attempt <= 0 {
 			return 0
 		}
-		// Prevent overflow: Fibonacci grows quickly, cap at 92 (fib(92) < max int)
+
 		if attempt > 92 {
 			attempt = 92
 		}
 		fib := fibonacci(attempt)
 		delay := base * time.Duration(fib)
-		if max > 0 && delay > max {
-			return max
+		if maxDelay > 0 && delay > maxDelay {
+			return maxDelay
 		}
 		return delay
 	}

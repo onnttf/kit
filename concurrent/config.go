@@ -6,54 +6,38 @@ import (
 	"time"
 )
 
-// Config specifies the executor configuration.
+// Config controls executor concurrency, retries, error handling, and callbacks.
 type Config[T any] struct {
-	// Name is the identifier for this executor.
 	Name string
 
-	// Concurrency is the number of concurrent workers.
 	Concurrency int
 
-	// Timeout is the per-task timeout. Zero means no timeout.
 	Timeout time.Duration
 
-	// MaxRetry is the maximum number of retry attempts.
 	MaxRetry int
 
-	// Backoff is the function that returns the delay before each retry.
 	Backoff BackoffFunc
 
-	// ErrorPolicy determines how to handle errors.
-	// If nil, defaults to AlwaysContinue.
 	ErrorPolicy ErrorPolicy[T]
 
-	// PanicPolicy determines how to handle panics.
-	// If nil, defaults to PanicAsAbort.
 	PanicPolicy PanicPolicy[T]
 
-	// MaxErrorSamples limits the number of error samples collected.
 	MaxErrorSamples int
 
-	// ErrorAggregation enables error grouping by message.
 	ErrorAggregation bool
 
-	// OnBegin is called when execution begins.
 	OnBegin func(ctx context.Context, total int)
 
-	// OnBefore is called before processing each item.
 	OnBefore func(ctx context.Context, item T, attempt int)
 
-	// OnAfter is called after processing each item.
 	OnAfter func(ctx context.Context, item T, err error, elapsed time.Duration)
 
-	// OnError is called when an error occurs.
 	OnError func(ctx context.Context, item T, err error, attempt int)
 
-	// OnEnd is called when execution completes.
 	OnEnd func(ctx context.Context, result *Result)
 }
 
-// Validate returns an error if the configuration is invalid.
+// Validate checks whether c can be used to create an Executor.
 func (c *Config[T]) Validate() error {
 	if c.Concurrency <= 0 {
 		return fmt.Errorf("concurrency must be > 0, got %d", c.Concurrency)
@@ -67,7 +51,7 @@ func (c *Config[T]) Validate() error {
 	return nil
 }
 
-// SetDefaults sets default values for unset fields.
+// SetDefaults fills unset optional fields with executor defaults.
 func (c *Config[T]) SetDefaults() {
 	if c.Name == "" {
 		c.Name = "executor"
