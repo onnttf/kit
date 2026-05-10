@@ -33,8 +33,7 @@ func TestFlattener_Flatten(t *testing.T) {
 func TestFlattener_Flatten_MissingKeyFn(t *testing.T) {
 	f := NewFlattener[TestItem, int]()
 	_, err := f.Flatten(nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "KeyBy not set")
+	require.ErrorIs(t, err, ErrKeyNotSet)
 }
 
 func TestFlattener_MultipleRoots(t *testing.T) {

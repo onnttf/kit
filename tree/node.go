@@ -1,5 +1,6 @@
 package tree
 
+// Node is an immutable tree node returned from built trees.
 type Node[T any] struct {
 	Item     T
 	Children []*Node[T]
@@ -21,4 +22,28 @@ func cloneNode[T any](n *Node[T]) *Node[T] {
 	}
 
 	return cp
+}
+
+func collectIndexes[T any, K comparable](
+	roots []*Node[T],
+	keyFn func(T) K,
+	cache map[K]*Node[T],
+	parentIdx map[K]K,
+) {
+	var collect func(*Node[T], K, bool)
+	collect = func(n *Node[T], parentKey K, hasParent bool) {
+		k := keyFn(n.Item)
+		cache[k] = n
+		if hasParent {
+			parentIdx[k] = parentKey
+		}
+		for _, child := range n.Children {
+			collect(child, k, true)
+		}
+	}
+
+	var zero K
+	for _, root := range roots {
+		collect(root, zero, false)
+	}
 }

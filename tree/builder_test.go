@@ -55,11 +55,48 @@ func TestBuilder_AddItemWithParent(t *testing.T) {
 	assert.True(t, b.items[0].hasParent)
 }
 
+func TestBuilder_AddItemWithParent_AllowsZeroValueParentKey(t *testing.T) {
+	type zeroKeyItem struct {
+		ID       int
+		ParentID int
+	}
+
+	b := NewBuilder[zeroKeyItem, int]().
+		KeyBy(func(item zeroKeyItem) int { return item.ID })
+	b.AddItem(zeroKeyItem{ID: 0})
+	b.AddItemWithParent(zeroKeyItem{ID: 1}, 0)
+
+	tree, err := b.Build()
+	require.NoError(t, err)
+
+	parent, ok := tree.ParentOf(1)
+	require.True(t, ok)
+	assert.Equal(t, 0, parent)
+
+	children, ok := tree.Children(0)
+	require.True(t, ok)
+	require.Len(t, children, 1)
+	assert.Equal(t, 1, children[0].Item.ID)
+}
+
 func TestBuilder_Filter(t *testing.T) {
 	b := NewBuilder[TestItem, int]()
 	b.KeyBy(keyFn).WithItems([]TestItem{{ID: 1}, {ID: 2}})
 	nb := b.Filter(func(c TestItem) bool { return c.ID == 1 })
 	assert.Len(t, nb.items, 1)
+}
+
+func TestBuilder_Filter_CopiesInternalItems(t *testing.T) {
+	b := NewBuilder[TestItem, int]()
+	b.KeyBy(keyFn).WithItems([]TestItem{{ID: 1, Name: "original"}})
+
+	nb := b.Filter(func(c TestItem) bool { return c.ID == 1 })
+	require.Len(t, nb.items, 1)
+
+	nb.Transform(func(item *TestItem) { item.Name = "filtered" })
+
+	assert.Equal(t, "original", b.items[0].data.Name)
+	assert.Equal(t, "filtered", nb.items[0].data.Name)
 }
 
 func TestBuilder_Transform(t *testing.T) {
@@ -77,16 +114,49 @@ func TestBuilder_Find(t *testing.T) {
 	assert.NotNil(t, node)
 }
 
-func TestBuilder_Contains(t *testing.T) {
+func TestBuilder_ContainsKey(t *testing.T) {
 	b := NewBuilder[TestItem, int]()
 	b.KeyBy(keyFn).WithItems([]TestItem{{ID: 1}})
-	found, err := b.Contains(1)
-	require.NoError(t, err)
-	assert.True(t, found)
 
-	found, err = b.Contains(999)
+	ok, err := b.ContainsKey(1)
 	require.NoError(t, err)
-	assert.False(t, found)
+	assert.True(t, ok)
+
+	ok, err = b.ContainsKey(999)
+	require.NoError(t, err)
+	assert.False(t, ok)
+
+	ok, err = NewBuilder[TestItem, int]().ContainsKey(1)
+	assert.ErrorIs(t, err, ErrKeyNotSet)
+	assert.False(t, ok)
+}
+
+func TestBuilder_KeyBasedMethods_RequireKeyBy(t *testing.T) {
+	b := NewBuilder[TestItem, int]()
+	b.WithItems([]TestItem{{ID: 1, ParentID: 1}, {ID: 2, ParentID: 1}})
+
+	_, err := b.ContainsKey(1)
+	assert.ErrorIs(t, err, ErrKeyNotSet)
+	assert.ErrorIs(t, b.UpdateItem(1, func(*TestItem) {}), ErrKeyNotSet)
+	_, err = b.ChildrenOf(1)
+	assert.ErrorIs(t, err, ErrKeyNotSet)
+	_, err = b.Depth(1)
+	assert.ErrorIs(t, err, ErrKeyNotSet)
+	_, err = b.IsDescendant(1, 2)
+	assert.ErrorIs(t, err, ErrKeyNotSet)
+	assert.ErrorIs(t, b.RemoveItem(1), ErrKeyNotSet)
+	assert.ErrorIs(t, b.MoveItem(2, 1), ErrKeyNotSet)
+	_, err = b.Subtree(1)
+	assert.ErrorIs(t, err, ErrKeyNotSet)
+}
+
+func TestBuilder_ContainsItem(t *testing.T) {
+	b := NewBuilder[TestItem, int]()
+	b.WithItems([]TestItem{{ID: 1, Name: "Alice"}, {ID: 2, Name: "Bob"}})
+
+	assert.True(t, b.ContainsItem(func(item TestItem) bool { return item.Name == "Bob" }))
+	assert.False(t, b.ContainsItem(func(item TestItem) bool { return item.Name == "Carol" }))
+	assert.False(t, b.ContainsItem(nil))
 }
 
 func TestBuilder_Build_DuplicateKey(t *testing.T) {
@@ -388,7 +458,7 @@ func TestBuilder_SortBy_Effect(t *testing.T) {
 func TestBuilder_ConcurrentWrites(t *testing.T) {
 	b := NewBuilder[TestItem, int]().KeyBy(keyFn)
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
@@ -442,7 +512,7 @@ func TestBuilder_ConcurrentBuildDuringAdd(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -499,16 +569,4 @@ func TestBuilder_Subtree(t *testing.T) {
 
 	_, err = b.Subtree(999)
 	assert.Error(t, err)
-}
-
-func TestBuilder_Orphans(t *testing.T) {
-	b := NewBuilder[TestItem, int]()
-	b.KeyBy(keyFn).ParentBy(parentFn).WithItems([]TestItem{
-		{ID: 1, Name: "Root", ParentID: 1},
-		{ID: 3, Name: "Root2", ParentID: 3},
-	})
-
-	orphans, err := b.Orphans()
-	require.NoError(t, err)
-	assert.Len(t, orphans, 0)
 }

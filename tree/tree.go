@@ -1,6 +1,8 @@
 package tree
 
-// Stats holds tree statistics.
+import "slices"
+
+// Stats summarizes basic tree shape metrics.
 type Stats struct {
 	TotalNodes  int
 	RootNodes   int
@@ -10,28 +12,27 @@ type Stats struct {
 	AvgChildren float64
 }
 
-// Tree represents an immutable tree structure.
+// Tree is an immutable tree built by Builder.
 type Tree[T any, K comparable] struct {
-	roots      []*Node[T]
-	cache      map[K]*Node[T]
-	parentIdx  map[K]K
-	keyFn      func(T) K
-	subtreeIdx map[K]*Tree[T, K]
+	roots     []*Node[T]
+	cache     map[K]*Node[T]
+	parentIdx map[K]K
+	keyFn     func(T) K
 }
 
 // Len returns the number of nodes in the tree.
 func (t *Tree[T, K]) Len() int { return len(t.cache) }
 
-// Empty returns true if the tree has no nodes.
+// Empty reports whether the tree has no nodes.
 func (t *Tree[T, K]) Empty() bool { return len(t.cache) == 0 }
 
-// ContainsKey returns true if the key exists in the tree.
+// ContainsKey reports whether key exists in the tree.
 func (t *Tree[T, K]) ContainsKey(key K) bool {
 	_, ok := t.cache[key]
 	return ok
 }
 
-// Get returns a cloned node by key.
+// Get returns a copy of the node for key.
 func (t *Tree[T, K]) Get(key K) (*Node[T], bool) {
 	n, ok := t.cache[key]
 	if !ok {
@@ -40,7 +41,7 @@ func (t *Tree[T, K]) Get(key K) (*Node[T], bool) {
 	return cloneNode(n), true
 }
 
-// Roots returns all root nodes.
+// Roots returns copies of the root nodes.
 func (t *Tree[T, K]) Roots() []*Node[T] {
 	out := make([]*Node[T], len(t.roots))
 	for i, n := range t.roots {
@@ -49,7 +50,7 @@ func (t *Tree[T, K]) Roots() []*Node[T] {
 	return out
 }
 
-// ParentOf returns the parent key of a node.
+// ParentOf returns the parent key for key.
 func (t *Tree[T, K]) ParentOf(key K) (K, bool) {
 	if _, ok := t.cache[key]; !ok {
 		var zero K
@@ -63,7 +64,7 @@ func (t *Tree[T, K]) ParentOf(key K) (K, bool) {
 	return pk, ok
 }
 
-// Children returns the direct children of a node.
+// Children returns copies of the direct children for key.
 func (t *Tree[T, K]) Children(key K) ([]*Node[T], bool) {
 	n, ok := t.cache[key]
 	if !ok {
@@ -76,23 +77,7 @@ func (t *Tree[T, K]) Children(key K) ([]*Node[T], bool) {
 	return children, true
 }
 
-// Orphans returns root nodes that have children but no parent.
-func (t *Tree[T, K]) Orphans() []*Node[T] {
-	if t.parentIdx == nil {
-		return nil
-	}
-
-	var orphans []*Node[T]
-	for k, n := range t.cache {
-		if _, hasParent := t.parentIdx[k]; !hasParent && len(n.Children) > 0 {
-			orphans = append(orphans, cloneNode(n))
-		}
-	}
-
-	return orphans
-}
-
-// LeafNodes returns all leaf nodes.
+// LeafNodes returns copies of all leaf nodes.
 func (t *Tree[T, K]) LeafNodes() []*Node[T] {
 	var leaves []*Node[T]
 	t.Walk(func(n *Node[T], _ *Node[T]) bool {
@@ -104,7 +89,7 @@ func (t *Tree[T, K]) LeafNodes() []*Node[T] {
 	return leaves
 }
 
-// Ancestors returns all ancestors of a node.
+// Ancestors returns copies of ancestors from parent to root.
 func (t *Tree[T, K]) Ancestors(key K) ([]*Node[T], bool) {
 	if _, ok := t.cache[key]; !ok {
 		return nil, false
@@ -126,9 +111,46 @@ func (t *Tree[T, K]) Ancestors(key K) ([]*Node[T], bool) {
 	return ancestors, len(ancestors) > 0
 }
 
-// Walk traverses the tree in depth-first pre-order.
-// fn receives (node, parent). parent is nil for root nodes.
-// The tree is expected to already have Level values assigned.
+// PathTo returns copies of nodes from a root to key.
+func (t *Tree[T, K]) PathTo(key K) ([]*Node[T], bool) {
+	n, ok := t.cache[key]
+	if !ok {
+		return nil, false
+	}
+
+	ancestors, _ := t.Ancestors(key)
+	path := make([]*Node[T], 0, len(ancestors)+1)
+	for _, ancestor := range slices.Backward(ancestors) {
+		path = append(path, ancestor)
+	}
+	path = append(path, cloneNode(n))
+	return path, true
+}
+
+// Descendants returns copies of all descendants in depth-first pre-order.
+func (t *Tree[T, K]) Descendants(key K) ([]*Node[T], bool) {
+	n, ok := t.cache[key]
+	if !ok {
+		return nil, false
+	}
+
+	descendants := make([]*Node[T], 0)
+	stack := make([]*Node[T], 0, len(n.Children))
+	for _, child := range slices.Backward(n.Children) {
+		stack = append(stack, child)
+	}
+	for len(stack) > 0 {
+		cur := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		descendants = append(descendants, cloneNode(cur))
+		for _, child := range slices.Backward(cur.Children) {
+			stack = append(stack, child)
+		}
+	}
+	return descendants, true
+}
+
+// Walk visits nodes in depth-first pre-order until fn returns false.
 func (t *Tree[T, K]) Walk(fn func(*Node[T], *Node[T]) bool) bool {
 	if fn == nil {
 		return true
@@ -140,8 +162,8 @@ func (t *Tree[T, K]) Walk(fn func(*Node[T], *Node[T]) bool) bool {
 	}
 
 	stack := make([]entry, 0, len(t.roots))
-	for i := len(t.roots) - 1; i >= 0; i-- {
-		stack = append(stack, entry{node: t.roots[i]})
+	for _, root := range slices.Backward(t.roots) {
+		stack = append(stack, entry{node: root})
 	}
 
 	for len(stack) > 0 {
@@ -152,9 +174,9 @@ func (t *Tree[T, K]) Walk(fn func(*Node[T], *Node[T]) bool) bool {
 			return false
 		}
 
-		for i := len(e.node.Children) - 1; i >= 0; i-- {
+		for _, child := range slices.Backward(e.node.Children) {
 			stack = append(stack, entry{
-				node:   e.node.Children[i],
+				node:   child,
 				parent: e.node,
 			})
 		}
@@ -163,42 +185,47 @@ func (t *Tree[T, K]) Walk(fn func(*Node[T], *Node[T]) bool) bool {
 	return true
 }
 
-// Filter returns a new tree with nodes matching the predicate.
+// Filter returns a tree containing nodes that match fn.
 func (t *Tree[T, K]) Filter(fn func(*Node[T]) bool) *Tree[T, K] {
 	var filteredRoots []*Node[T]
-	var filteredCache map[K]*Node[T] = make(map[K]*Node[T])
+	filteredCache := make(map[K]*Node[T])
+	filteredParentIdx := make(map[K]K)
 
-	var filterNode func(*Node[T])
-	filterNode = func(n *Node[T]) {
-		if !fn(n) {
-			return
-		}
-		k := t.keyFn(n.Item)
-		newNode := cloneNode(n)
-		filteredCache[k] = newNode
-		filteredRoots = append(filteredRoots, newNode)
-
+	var filterNode func(*Node[T]) []*Node[T]
+	filterNode = func(n *Node[T]) []*Node[T] {
+		var children []*Node[T]
 		for _, c := range n.Children {
-			filterNode(c)
+			children = append(children, filterNode(c)...)
 		}
+
+		if !fn(n) {
+			return children
+		}
+
+		newNode := &Node[T]{
+			Item:     n.Item,
+			Children: children,
+			Level:    n.Level,
+		}
+		return []*Node[T]{newNode}
 	}
 
 	for _, r := range t.roots {
-		filterNode(r)
+		filteredRoots = append(filteredRoots, filterNode(r)...)
 	}
 
 	assignLevels(filteredRoots, 1)
+	collectIndexes(filteredRoots, t.keyFn, filteredCache, filteredParentIdx)
 
 	return &Tree[T, K]{
-		roots:      filteredRoots,
-		cache:      filteredCache,
-		parentIdx:  t.parentIdx,
-		keyFn:      t.keyFn,
-		subtreeIdx: make(map[K]*Tree[T, K]),
+		roots:     filteredRoots,
+		cache:     filteredCache,
+		parentIdx: filteredParentIdx,
+		keyFn:     t.keyFn,
 	}
 }
 
-// Map returns a new tree with transformed items.
+// Map returns a tree with each item transformed by fn and re-keyed by keyFn.
 func (t *Tree[T, K]) Map(fn func(T) T, keyFn func(T) K) *Tree[T, K] {
 	newRoots := make([]*Node[T], len(t.roots))
 
@@ -219,31 +246,18 @@ func (t *Tree[T, K]) Map(fn func(T) T, keyFn func(T) K) *Tree[T, K] {
 	assignLevels(newRoots, 1)
 
 	newCache := make(map[K]*Node[T], len(t.cache))
-	for i, r := range newRoots {
-		k := keyFn(r.Item)
-		newCache[k] = r
-
-		var collectCache func(*Node[T])
-		collectCache = func(n *Node[T]) {
-			k := keyFn(n.Item)
-			newCache[k] = n
-			for _, c := range n.Children {
-				collectCache(c)
-			}
-		}
-		collectCache(newRoots[i])
-	}
+	newParentIdx := make(map[K]K, len(t.parentIdx))
+	collectIndexes(newRoots, keyFn, newCache, newParentIdx)
 
 	return &Tree[T, K]{
-		roots:      newRoots,
-		cache:      newCache,
-		parentIdx:  t.parentIdx,
-		keyFn:      keyFn,
-		subtreeIdx: make(map[K]*Tree[T, K]),
+		roots:     newRoots,
+		cache:     newCache,
+		parentIdx: newParentIdx,
+		keyFn:     keyFn,
 	}
 }
 
-// Clone returns a deep copy of the tree.
+// Clone returns a deep copy of the tree structure.
 func (t *Tree[T, K]) Clone() *Tree[T, K] {
 	roots := make([]*Node[T], len(t.roots))
 	cache := make(map[K]*Node[T], len(t.cache))
@@ -253,40 +267,35 @@ func (t *Tree[T, K]) Clone() *Tree[T, K] {
 		roots[i] = cloneNode(r)
 	}
 
-	var collect func(*Node[T], K)
-	collect = func(n *Node[T], pk K) {
+	var collect func(*Node[T], K, bool)
+	collect = func(n *Node[T], pk K, hasParent bool) {
 		k := t.keyFn(n.Item)
 		cache[k] = n
-		if pk != *new(K) {
+		if hasParent {
 			parentIdx[k] = pk
 		}
 		for _, c := range n.Children {
-			collect(c, k)
+			collect(c, k, true)
 		}
 	}
 
-	var zeroK K
+	var zero K
 	for _, r := range t.roots {
-		collect(r, zeroK)
+		collect(r, zero, false)
 	}
 
 	return &Tree[T, K]{
-		roots:      roots,
-		cache:      cache,
-		parentIdx:  parentIdx,
-		keyFn:      t.keyFn,
-		subtreeIdx: make(map[K]*Tree[T, K]),
+		roots:     roots,
+		cache:     cache,
+		parentIdx: parentIdx,
+		keyFn:     t.keyFn,
 	}
 }
 
-// Subtree returns a subtree rooted at the given key.
+// Subtree returns a tree rooted at key.
 func (t *Tree[T, K]) Subtree(key K) (*Tree[T, K], bool) {
 	if _, ok := t.cache[key]; !ok {
 		return nil, false
-	}
-
-	if st, ok := t.subtreeIdx[key]; ok {
-		return st, true
 	}
 
 	root := t.cache[key]
@@ -299,34 +308,19 @@ func (t *Tree[T, K]) Subtree(key K) (*Tree[T, K], bool) {
 	cache := make(map[K]*Node[T])
 	parentIdx := make(map[K]K)
 
-	var buildCache func(*Node[T], K)
-	buildCache = func(n *Node[T], parentKey K) {
-		k := t.keyFn(n.Item)
-		cache[k] = n
-		if parentKey != *new(K) {
-			parentIdx[k] = parentKey
-		}
-		for _, c := range n.Children {
-			buildCache(c, k)
-		}
-	}
-
-	var zeroK K
-	buildCache(rootCopy, zeroK)
+	collectIndexes(roots, t.keyFn, cache, parentIdx)
 
 	subtree := &Tree[T, K]{
-		roots:      roots,
-		cache:      cache,
-		parentIdx:  parentIdx,
-		keyFn:      t.keyFn,
-		subtreeIdx: make(map[K]*Tree[T, K]),
+		roots:     roots,
+		cache:     cache,
+		parentIdx: parentIdx,
+		keyFn:     t.keyFn,
 	}
 
-	t.subtreeIdx[key] = subtree
 	return subtree, true
 }
 
-// ToMap returns all items as a map.
+// ToMap returns all tree items keyed by their tree key.
 func (t *Tree[T, K]) ToMap() map[K]T {
 	result := make(map[K]T, len(t.cache))
 	for k, n := range t.cache {
@@ -335,18 +329,19 @@ func (t *Tree[T, K]) ToMap() map[K]T {
 	return result
 }
 
-// Stats returns tree statistics.
+// Stats returns tree shape metrics.
 func (t *Tree[T, K]) Stats() Stats {
 	if len(t.cache) == 0 {
 		return Stats{}
 	}
 
-	var total, leaves, maxDepth, totalDepth int
+	var total, leaves, maxDepth, totalDepth, totalChildren int
 	rootCount := len(t.roots)
 
 	var walk func(*Node[T])
 	walk = func(n *Node[T]) {
 		total++
+		totalChildren += len(n.Children)
 		if n.Level > maxDepth {
 			maxDepth = n.Level
 		}
@@ -365,8 +360,8 @@ func (t *Tree[T, K]) Stats() Stats {
 	}
 
 	avgChildren := 0.0
-	if total > rootCount {
-		avgChildren = float64(total-rootCount) / float64(rootCount)
+	if total > 0 {
+		avgChildren = float64(totalChildren) / float64(total)
 	}
 
 	avgDepth := 0.0
