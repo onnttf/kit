@@ -46,16 +46,16 @@ func TestConfig_Callbacks(t *testing.T) {
 	var beginCalled, endCalled bool
 	config := Config[int]{
 		Concurrency: 1,
-		OnBegin: func(ctx context.Context, total int) {
+		OnBegin: func(context.Context, int) {
 			beginCalled = true
 		},
-		OnEnd: func(ctx context.Context, result *Result) {
+		OnEnd: func(context.Context, *Result) {
 			endCalled = true
 		},
 	}
 	exec, err := New(config)
 	assert.NoError(t, err)
-	result, err := exec.Run(context.Background(), []int{1, 2, 3}, func(ctx context.Context, item int) error {
+	result, err := exec.Run(context.Background(), []int{1, 2, 3}, func(context.Context, int) error {
 		return nil
 	})
 	assert.NoError(t, err)

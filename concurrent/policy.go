@@ -6,38 +6,37 @@ import (
 	"sync"
 )
 
-// PanicAsAbort returns a PanicPolicy that aborts on any panic.
+// PanicAsAbort returns a panic policy that aborts the executor.
 func PanicAsAbort[T any]() PanicPolicy[T] {
-	return func(panicValue any, item T, attempt int) ErrorAction {
+	return func(_ any, _ T, _ int) ErrorAction {
 		return ActionAbort
 	}
 }
 
-// PanicAsContinue returns a PanicPolicy that continues after panics.
+// PanicAsContinue returns a panic policy that records the panic as an item error.
 func PanicAsContinue[T any]() PanicPolicy[T] {
-	return func(panicValue any, item T, attempt int) ErrorAction {
+	return func(_ any, _ T, _ int) ErrorAction {
 		return ActionContinue
 	}
 }
 
-// AlwaysContinue returns an ErrorPolicy that always continues.
-// This is the default policy.
+// AlwaysContinue returns an error policy that records errors and continues.
 func AlwaysContinue[T any]() ErrorPolicy[T] {
-	return func(err error, item T, attempt int) ErrorAction {
+	return func(_ error, _ T, _ int) ErrorAction {
 		return ActionContinue
 	}
 }
 
-// AlwaysRetry returns an ErrorPolicy that always retries.
+// AlwaysRetry returns an error policy that retries every error.
 func AlwaysRetry[T any]() ErrorPolicy[T] {
-	return func(err error, item T, attempt int) ErrorAction {
+	return func(_ error, _ T, _ int) ErrorAction {
 		return ActionRetry
 	}
 }
 
-// RetryOnTimeout returns an ErrorPolicy that retries on timeout.
+// RetryOnTimeout retries errors wrapping context deadline or cancellation timeouts.
 func RetryOnTimeout[T any]() ErrorPolicy[T] {
-	return func(err error, item T, attempt int) ErrorAction {
+	return func(err error, _ T, _ int) ErrorAction {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return ActionRetry
 		}
@@ -45,18 +44,17 @@ func RetryOnTimeout[T any]() ErrorPolicy[T] {
 	}
 }
 
-// AbortOnError returns an ErrorPolicy that aborts on any error.
+// AbortOnError aborts the executor on every handler error.
 func AbortOnError[T any]() ErrorPolicy[T] {
-	return func(err error, item T, attempt int) ErrorAction {
+	return func(_ error, _ T, _ int) ErrorAction {
 		return ActionAbort
 	}
 }
 
-// AbortOnFirstError returns an ErrorPolicy that aborts on the first error.
-// Due to concurrent execution, multiple errors may occur before abort takes effect.
+// AbortOnFirstError aborts only the first error seen by this policy instance.
 func AbortOnFirstError[T any]() ErrorPolicy[T] {
 	var once sync.Once
-	return func(err error, item T, attempt int) ErrorAction {
+	return func(_ error, _ T, _ int) ErrorAction {
 		var shouldAbort bool
 		once.Do(func() {
 			shouldAbort = true
@@ -68,9 +66,9 @@ func AbortOnFirstError[T any]() ErrorPolicy[T] {
 	}
 }
 
-// RetryOnCondition returns an ErrorPolicy that retries based on a condition.
+// RetryOnCondition retries when shouldRetry returns true.
 func RetryOnCondition[T any](shouldRetry func(error) bool) ErrorPolicy[T] {
-	return func(err error, item T, attempt int) ErrorAction {
+	return func(err error, _ T, _ int) ErrorAction {
 		if shouldRetry(err) {
 			return ActionRetry
 		}
@@ -78,9 +76,9 @@ func RetryOnCondition[T any](shouldRetry func(error) bool) ErrorPolicy[T] {
 	}
 }
 
-// AbortOnCondition returns an ErrorPolicy that aborts based on a condition.
+// AbortOnCondition aborts when shouldAbort returns true.
 func AbortOnCondition[T any](shouldAbort func(error) bool) ErrorPolicy[T] {
-	return func(err error, item T, attempt int) ErrorAction {
+	return func(err error, _ T, _ int) ErrorAction {
 		if shouldAbort(err) {
 			return ActionAbort
 		}
@@ -88,8 +86,7 @@ func AbortOnCondition[T any](shouldAbort func(error) bool) ErrorPolicy[T] {
 	}
 }
 
-// CombinePolicies returns an ErrorPolicy that combines multiple policies.
-// It evaluates policies in order and returns the first non-Continue action.
+// CombinePolicies evaluates policies in order and returns the first non-continue action.
 func CombinePolicies[T any](policies ...ErrorPolicy[T]) ErrorPolicy[T] {
 	return func(err error, item T, attempt int) ErrorAction {
 		for _, policy := range policies {

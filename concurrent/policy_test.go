@@ -59,7 +59,7 @@ func TestAbortOnFirstError_Concurrent(t *testing.T) {
 	policy := AbortOnFirstError[int]()
 	var wg sync.WaitGroup
 	results := make([]ErrorAction, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -98,7 +98,7 @@ func TestAbortOnCondition(t *testing.T) {
 
 func TestCombinePolicies(t *testing.T) {
 	t.Run("stops on non-continue", func(t *testing.T) {
-		policy := CombinePolicies[int](
+		policy := CombinePolicies(
 			AlwaysContinue[int](),
 			AbortOnError[int](),
 			AlwaysRetry[int](),

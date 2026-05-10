@@ -27,7 +27,7 @@ func TestErrorAction_String(t *testing.T) {
 
 func TestHandler(t *testing.T) {
 	var called bool
-	handler := func(ctx context.Context, item int) error {
+	handler := func(context.Context, int) error {
 		called = true
 		return nil
 	}
@@ -38,7 +38,7 @@ func TestHandler(t *testing.T) {
 
 func TestHandlerWithError(t *testing.T) {
 	expectedErr := errors.New("handler error")
-	handler := func(ctx context.Context, item int) error {
+	handler := func(context.Context, int) error {
 		return expectedErr
 	}
 	err := handler(context.Background(), 1)

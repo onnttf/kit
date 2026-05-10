@@ -5,22 +5,25 @@ import (
 	"time"
 )
 
-// Handler processes a single item. It returns an error if processing fails.
+// Handler processes one item. It should honor ctx cancellation when doing
+// blocking work.
 type Handler[T any] func(ctx context.Context, item T) error
 
-// ErrorAction specifies the action to take when an error occurs.
+// ErrorAction controls what the executor does after a handler error.
 type ErrorAction int
 
 const (
-	// ActionContinue continues to the next item.
+	// ActionContinue records the error and continues with the next item.
 	ActionContinue ErrorAction = iota
-	// ActionRetry retries the current item.
+
+	// ActionRetry retries the item until MaxRetry is reached.
 	ActionRetry
-	// ActionAbort stops all execution.
+
+	// ActionAbort stops the executor after the current error.
 	ActionAbort
 )
 
-// String returns the string representation of ErrorAction.
+// String returns a stable label for a retry action.
 func (a ErrorAction) String() string {
 	switch a {
 	case ActionContinue:
@@ -34,23 +37,17 @@ func (a ErrorAction) String() string {
 	}
 }
 
-// ErrorPolicy determines how to handle errors. It receives the error,
-// the failed item, and the attempt number (0-based), and returns an
-// ErrorAction indicating how to proceed.
+// ErrorPolicy maps a handler error to the next executor action.
 type ErrorPolicy[T any] func(err error, item T, attempt int) ErrorAction
 
-// PanicPolicy determines how to handle panics. It receives the panic
-// value, the item being processed, and the attempt number (0-based),
-// and returns an ErrorAction indicating how to proceed.
+// PanicPolicy maps a recovered panic to the next executor action.
 type PanicPolicy[T any] func(panicValue any, item T, attempt int) ErrorAction
 
-// BackoffFunc returns the delay before the next retry. The attempt
-// parameter is 1-based (first retry is attempt 1).
+// BackoffFunc returns the delay before a retry attempt.
 type BackoffFunc func(attempt int) time.Duration
 
-// workItem represents a single unit of work.
 type workItem[T any] struct {
-	id      int // unique identifier.
-	data    T   // item to process.
-	attempt int // retry attempt (0-based).
+	id      int
+	data    T
+	attempt int
 }
