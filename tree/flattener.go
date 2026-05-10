@@ -1,29 +1,34 @@
 package tree
 
-import "fmt"
+import "slices"
 
+// Flattener converts tree nodes back into a flat item slice.
 type Flattener[T any, K comparable] struct {
 	keyFn    func(T) K
 	parentFn func(T, K) T
 }
 
+// NewFlattener returns an empty flattener.
 func NewFlattener[T any, K comparable]() *Flattener[T, K] {
 	return &Flattener[T, K]{}
 }
 
+// KeyBy sets the function used to derive an item key.
 func (f *Flattener[T, K]) KeyBy(fn func(T) K) *Flattener[T, K] {
 	f.keyFn = fn
 	return f
 }
 
+// ParentBy sets the function used to write parent keys into flattened items.
 func (f *Flattener[T, K]) ParentBy(fn func(T, K) T) *Flattener[T, K] {
 	f.parentFn = fn
 	return f
 }
 
+// Flatten returns a pre-order slice of items from roots.
 func (f *Flattener[T, K]) Flatten(roots []*Node[T]) ([]T, error) {
 	if f.keyFn == nil {
-		return nil, fmt.Errorf("Flatten: KeyBy not set")
+		return nil, ErrKeyNotSet
 	}
 
 	result := make([]T, 0, len(roots)*4)
@@ -35,8 +40,8 @@ func (f *Flattener[T, K]) Flatten(roots []*Node[T]) ([]T, error) {
 	}
 
 	stack := make([]entry, 0, len(roots))
-	for i := len(roots) - 1; i >= 0; i-- {
-		stack = append(stack, entry{node: roots[i]})
+	for _, root := range slices.Backward(roots) {
+		stack = append(stack, entry{node: root})
 	}
 
 	for len(stack) > 0 {
@@ -50,9 +55,9 @@ func (f *Flattener[T, K]) Flatten(roots []*Node[T]) ([]T, error) {
 		result = append(result, item)
 
 		nodeKey := f.keyFn(e.node.Item)
-		for i := len(e.node.Children) - 1; i >= 0; i-- {
+		for _, child := range slices.Backward(e.node.Children) {
 			stack = append(stack, entry{
-				node:      e.node.Children[i],
+				node:      child,
 				parentKey: nodeKey,
 				hasParent: true,
 			})

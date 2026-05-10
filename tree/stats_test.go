@@ -24,7 +24,7 @@ func TestStats(t *testing.T) {
 	assert.Equal(t, 1, stats.RootNodes)
 	assert.Equal(t, 3, stats.MaxDepth)
 	assert.Equal(t, 2, stats.LeafNodes)
-	assert.Greater(t, stats.AvgChildren, 0.0)
+	assert.InDelta(t, 0.75, stats.AvgChildren, 0.0001)
 	assert.Greater(t, stats.AvgDepth, 0.0)
 }
 
