@@ -15,20 +15,6 @@ type testProduct struct {
 	Price float64 `gorm:"size:255"`
 }
 
-func setupTestDBForScopes(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	if err != nil {
-		t.Fatalf("failed to open test db: %v", err)
-	}
-	err = db.AutoMigrate(&testProduct{})
-	if err != nil {
-		t.Fatalf("failed to migrate: %v", err)
-	}
-	return db
-}
-
 func TestEscapeLike(t *testing.T) {
 	assert.Equal(t, "hello", escapeLike("hello"))
 	assert.Equal(t, `hello\%world`, escapeLike("hello%world"))
@@ -140,7 +126,7 @@ func TestOrderBy(t *testing.T) {
 	db.Create(&testProduct{Name: "A", Price: 1.0})
 	db.Create(&testProduct{Name: "B", Price: 2.0})
 
-	scope := OrderBy("name", "asc")
+	scope := Order("name", "asc")
 	result := scope(db)
 	var products []testProduct
 	result.Find(&products)
@@ -165,7 +151,7 @@ func TestLike(t *testing.T) {
 	db.Create(&testProduct{Name: "Apple", Price: 1.5})
 	db.Create(&testProduct{Name: "ApplePie", Price: 5.0})
 
-	scope := Like("name", "Apple")
+	scope := Contains("name", "Apple")
 	result := scope(db)
 	var products []testProduct
 	result.Find(&products)
@@ -175,4 +161,18 @@ func TestLike(t *testing.T) {
 func TestPaginationConstants(t *testing.T) {
 	assert.Equal(t, 10, DefaultPageSize)
 	assert.Equal(t, 100, MaxPageSize)
+}
+
+func setupTestDBForScopes(t *testing.T) *gorm.DB {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+	err = db.AutoMigrate(&testProduct{})
+	if err != nil {
+		t.Fatalf("failed to migrate: %v", err)
+	}
+	return db
 }
