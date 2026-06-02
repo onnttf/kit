@@ -29,7 +29,6 @@ type Repository[T any] interface {
 	Delete(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) error
 }
 
-// Repo implements Repository for model T.
 type Repo[T any] struct{}
 
 var (
@@ -39,34 +38,32 @@ var (
 	ErrNoRowsAffected = errors.New("no rows affected")
 )
 
-// NewRepo returns a repository for model T.
 func NewRepo[T any]() *Repo[T] {
 	return &Repo[T]{}
 }
 
-// Insert creates newValue.
 func (r *Repo[T]) Insert(ctx context.Context, db *gorm.DB, newValue *T) error {
 	if db == nil {
-		return errors.New("db is nil")
+		return errors.New("insert: db is nil")
 	}
 	if newValue == nil {
-		return errors.New("new value is nil")
+		return errors.New("insert: new value is nil")
 	}
 	result := db.WithContext(ctx).Create(newValue)
 	return handleExecError("insert", result)
 }
 
-// BatchInsert creates newValues in batches. A non-positive batchSize uses a default.
+// BatchInsert persists model values in batches. A non-positive batchSize uses a default.
 func (r *Repo[T]) BatchInsert(ctx context.Context, db *gorm.DB, newValues []*T, batchSize int) error {
 	if db == nil {
-		return errors.New("db is nil")
+		return errors.New("batch insert: db is nil")
 	}
 	if len(newValues) == 0 {
-		return errors.New("new values are empty")
+		return errors.New("batch insert: new values are empty")
 	}
 	for i, newValue := range newValues {
 		if newValue == nil {
-			return fmt.Errorf("new values[%d] is nil", i)
+			return fmt.Errorf("batch insert: new values[%d] is nil", i)
 		}
 	}
 	if batchSize <= 0 {
@@ -79,13 +76,13 @@ func (r *Repo[T]) BatchInsert(ctx context.Context, db *gorm.DB, newValues []*T, 
 // Update updates non-zero fields in newValue for rows matched by scopes.
 func (r *Repo[T]) Update(ctx context.Context, db *gorm.DB, newValue *T, scopes ...func(db *gorm.DB) *gorm.DB) error {
 	if db == nil {
-		return errors.New("db is nil")
+		return errors.New("update: db is nil")
 	}
 	if newValue == nil {
-		return errors.New("new value is nil")
+		return errors.New("update: new value is nil")
 	}
 	if len(scopes) == 0 {
-		return errors.New("update without scope is not allowed")
+		return errors.New("update: scope is required")
 	}
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Updates(newValue)
 	return handleExecError("update", result)
@@ -99,22 +96,21 @@ func (r *Repo[T]) UpdateFields(
 	scopes ...func(db *gorm.DB) *gorm.DB,
 ) error {
 	if db == nil {
-		return errors.New("db is nil")
+		return errors.New("update fields: db is nil")
 	}
 	if len(newValue) == 0 {
-		return errors.New("new value is empty")
+		return errors.New("update fields: new value is empty")
 	}
 	if len(scopes) == 0 {
-		return errors.New("update fields without scope is not allowed")
+		return errors.New("update fields: scope is required")
 	}
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Updates(newValue)
 	return handleExecError("update fields", result)
 }
 
-// QueryOne returns the first row matched by scopes.
 func (r *Repo[T]) QueryOne(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) (*T, error) {
 	if db == nil {
-		return nil, errors.New("db is nil")
+		return nil, errors.New("query one: db is nil")
 	}
 	var record T
 	result := db.WithContext(ctx).Scopes(scopes...).First(&record)
@@ -124,20 +120,18 @@ func (r *Repo[T]) QueryOne(ctx context.Context, db *gorm.DB, scopes ...func(db *
 	return &record, nil
 }
 
-// Query returns all rows matched by scopes.
 func (r *Repo[T]) Query(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) ([]T, error) {
 	if db == nil {
-		return nil, errors.New("db is nil")
+		return nil, errors.New("query: db is nil")
 	}
 	records := []T{}
 	result := db.WithContext(ctx).Scopes(scopes...).Find(&records)
 	return records, handleQueryError("query", result)
 }
 
-// Count returns the number of rows matched by scopes.
 func (r *Repo[T]) Count(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) (int64, error) {
 	if db == nil {
-		return 0, errors.New("db is nil")
+		return 0, errors.New("count: db is nil")
 	}
 	var count int64
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Count(&count)
@@ -147,35 +141,35 @@ func (r *Repo[T]) Count(ctx context.Context, db *gorm.DB, scopes ...func(db *gor
 // Delete removes rows matched by scopes. At least one scope is required.
 func (r *Repo[T]) Delete(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) error {
 	if db == nil {
-		return errors.New("db is nil")
+		return errors.New("delete: db is nil")
 	}
 	if len(scopes) == 0 {
-		return errors.New("delete without scope is not allowed")
+		return errors.New("delete: scope is required")
 	}
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Delete(new(T))
 	return handleExecError("delete", result)
 }
 
-// Raw executes sql and scans the result into []T.
+// Raw executes a query and scans rows into []T.
 func (r *Repo[T]) Raw(ctx context.Context, db *gorm.DB, sql string, args ...any) ([]T, error) {
 	if db == nil {
-		return nil, errors.New("db is nil")
+		return nil, errors.New("raw: db is nil")
 	}
 	if sql == "" {
-		return nil, errors.New("sql is empty")
+		return nil, errors.New("raw: sql is empty")
 	}
 	results := []T{}
 	result := db.WithContext(ctx).Raw(sql, args...).Find(&results)
 	return results, handleQueryError("raw", result)
 }
 
-// Exec executes a raw SQL statement and allows zero affected rows.
+// Exec executes a statement and allows zero affected rows.
 func Exec(ctx context.Context, db *gorm.DB, sql string, args ...any) error {
 	if db == nil {
-		return errors.New("db is nil")
+		return errors.New("exec: db is nil")
 	}
 	if sql == "" {
-		return errors.New("sql is empty")
+		return errors.New("exec: sql is empty")
 	}
 	result := db.WithContext(ctx).Exec(sql, args...)
 	if result.Error != nil {

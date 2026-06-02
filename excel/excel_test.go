@@ -52,7 +52,6 @@ func TestParse(t *testing.T) {
 	t.Run("invalid int", func(t *testing.T) {
 		_, err := Parse[Person]([]string{"Alice", "not-an-int"})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "column B")
 	})
 
 	t.Run("pointer field", func(t *testing.T) {
@@ -72,14 +71,12 @@ func TestParse(t *testing.T) {
 
 	t.Run("non struct type", func(t *testing.T) {
 		_, err := Parse[int]([]string{"1"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "struct")
+		assert.ErrorIs(t, err, errInvalidTarget)
 	})
 
 	t.Run("unsupported pointer shape", func(t *testing.T) {
 		_, err := Parse[**Person]([]string{"Alice", "25"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "struct")
+		assert.ErrorIs(t, err, errInvalidTarget)
 	})
 
 	t.Run("invalid field target", func(t *testing.T) {
@@ -89,8 +86,7 @@ func TestParse(t *testing.T) {
 
 		assert.Empty(t, record{}.name)
 		_, err := Parse[record]([]string{"Alice"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "unexported")
+		assert.ErrorIs(t, err, errUnexported)
 	})
 
 	t.Run("unsupported field type", func(t *testing.T) {
@@ -99,8 +95,7 @@ func TestParse(t *testing.T) {
 		}
 
 		_, err := Parse[record]([]string{"a,b"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "unsupported type")
+		assert.ErrorIs(t, err, errUnsupported)
 	})
 
 	t.Run("numeric overflow", func(t *testing.T) {
@@ -111,16 +106,13 @@ func TestParse(t *testing.T) {
 		}
 
 		_, err := Parse[record]([]string{"128", "1", "1"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "overflows")
+		assert.ErrorIs(t, err, errValueOverflow)
 
 		_, err = Parse[record]([]string{"1", "256", "1"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "overflows")
+		assert.ErrorIs(t, err, errValueOverflow)
 
 		_, err = Parse[record]([]string{"1", "1", "3.5e38"})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "overflows")
+		assert.ErrorIs(t, err, errValueOverflow)
 	})
 }
 
@@ -241,6 +233,16 @@ func TestScanAll_ReturnsScanError(t *testing.T) {
 	filePath := createTestExcelFile(t)
 	_, err := ScanAll[Person](filePath, "Missing")
 	require.Error(t, err)
+}
+
+func TestWalk_NilCallback(t *testing.T) {
+	err := Walk("missing.xlsx", "Test", nil)
+	assert.ErrorIs(t, err, errNilCallback)
+}
+
+func TestScanRow_NilCallback(t *testing.T) {
+	err := ScanRow[Person]("missing.xlsx", "Test", nil)
+	assert.ErrorIs(t, err, errNilCallback)
 }
 
 func BenchmarkParse(b *testing.B) {

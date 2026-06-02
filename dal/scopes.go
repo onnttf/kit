@@ -49,49 +49,42 @@ func Paginate(page, pageSize int) func(db *gorm.DB) *gorm.DB {
 	}
 }
 
-// Equal returns a scope for column = value.
 func Equal[T ScalarValue](column string, value T) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" = ?", value)
 	}
 }
 
-// NotEqual returns a scope for column != value.
 func NotEqual[T ScalarValue](column string, value T) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" != ?", value)
 	}
 }
 
-// GreaterThan returns a scope for column > value.
 func GreaterThan[T RangeValue](column string, value T) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" > ?", value)
 	}
 }
 
-// LessThan returns a scope for column < value.
 func LessThan[T RangeValue](column string, value T) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" < ?", value)
 	}
 }
 
-// GreaterThanOrEqual returns a scope for column >= value.
 func GreaterThanOrEqual[T RangeValue](column string, value T) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" >= ?", value)
 	}
 }
 
-// LessThanOrEqual returns a scope for column <= value.
 func LessThanOrEqual[T RangeValue](column string, value T) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" <= ?", value)
 	}
 }
 
-// In returns a scope for column IN values.
 // When values is empty, it returns a condition that never matches.
 func In[T ScalarValue](column string, values []T) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
@@ -102,7 +95,6 @@ func In[T ScalarValue](column string, values []T) func(db *gorm.DB) *gorm.DB {
 	}
 }
 
-// NotIn returns a scope for column NOT IN values.
 // When values is empty, it applies no filter.
 func NotIn[T ScalarValue](column string, values []T) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
@@ -113,28 +105,24 @@ func NotIn[T ScalarValue](column string, values []T) func(db *gorm.DB) *gorm.DB 
 	}
 }
 
-// Between returns a scope for column BETWEEN lower AND upper.
 func Between[T RangeValue](column string, lower, upper T) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" BETWEEN ? AND ?", lower, upper)
 	}
 }
 
-// NotBetween returns a scope for column NOT BETWEEN lower AND upper.
 func NotBetween[T RangeValue](column string, lower, upper T) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column)+" NOT BETWEEN ? AND ?", lower, upper)
 	}
 }
 
-// IsNull returns a scope for column IS NULL.
 func IsNull(column string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column) + " IS NULL")
 	}
 }
 
-// IsNotNull returns a scope for column IS NOT NULL.
 func IsNotNull(column string) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		return db.Where(db.Statement.Quote(column) + " IS NOT NULL")
@@ -152,7 +140,6 @@ func Order(column, direction string) func(db *gorm.DB) *gorm.DB {
 	}
 }
 
-// Limit returns a scope that applies a SQL limit.
 // When limit is non-positive, it applies no limit.
 func Limit(limit int) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {

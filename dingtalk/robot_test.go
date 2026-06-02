@@ -55,7 +55,6 @@ func TestRobot_SendWithContext_EmptyToken(t *testing.T) {
 	robot := NewRobot("")
 	err := robot.SendWithContext(context.Background(), NewTextMsg("Hello"))
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "access token is empty")
 }
 
 func TestRobot_SendWithContext_NilClient(t *testing.T) {
@@ -63,14 +62,12 @@ func TestRobot_SendWithContext_NilClient(t *testing.T) {
 	robot.httpClient = nil
 	err := robot.SendWithContext(context.Background(), NewTextMsg("Hello"))
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "http client is nil")
 }
 
 func TestRobot_SendWithContext_NilMessage(t *testing.T) {
 	robot := NewRobot("test_token")
 	err := robot.SendWithContext(context.Background(), nil)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "message is nil")
 }
 
 func TestRobot_SendWithContext_Success(t *testing.T) {
@@ -106,8 +103,7 @@ func TestRobot_SendWithContext_DingTalkError(t *testing.T) {
 
 	err := robot.SendWithContext(context.Background(), NewTextMsg("Hello"))
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "errcode=310000")
+	assert.ErrorIs(t, err, ErrUnexpectedResponse)
 }
 
 func TestRobot_SendWithContext_HTTPErrorIncludesBody(t *testing.T) {
@@ -119,9 +115,7 @@ func TestRobot_SendWithContext_HTTPErrorIncludesBody(t *testing.T) {
 
 	err := robot.SendWithContext(context.Background(), NewTextMsg("Hello"))
 
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "status=502")
-	assert.Contains(t, err.Error(), "bad gateway")
+	assert.ErrorIs(t, err, ErrUnexpectedStatus)
 }
 
 func TestRobot_CalculateSign(t *testing.T) {

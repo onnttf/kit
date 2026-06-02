@@ -15,14 +15,22 @@ import (
 
 const tagKey = "excel"
 
-var structCache sync.Map
+var (
+	structCache sync.Map
 
-// IsXLSX reports whether filename has an .xlsx extension.
+	errNilCallback   = errors.New("excel: callback is nil")
+	errInvalidTarget = errors.New("excel: invalid target")
+	errInvalidColumn = errors.New("excel: invalid column")
+	errUnexported    = errors.New("excel: field is unexported")
+	errUnsupported   = errors.New("excel: unsupported type")
+	errValueOverflow = errors.New("excel: value overflows target type")
+	errEmptyColumn   = errors.New("excel: column name is empty")
+)
+
 func IsXLSX(filename string) bool {
 	return strings.EqualFold(filepath.Ext(filename), ".xlsx")
 }
 
-// Read opens path and returns all sheets keyed by sheet name.
 func Read(path string) (data map[string][][]string, err error) {
 	wb, err := Open(path)
 	if err != nil {
@@ -36,7 +44,6 @@ func Read(path string) (data map[string][][]string, err error) {
 	return wb.ReadAll()
 }
 
-// ReadSheet opens path and returns rows from one sheet.
 func ReadSheet(path, name string) (rows [][]string, err error) {
 	wb, err := Open(path)
 	if err != nil {
@@ -50,8 +57,13 @@ func ReadSheet(path, name string) (rows [][]string, err error) {
 	return wb.Sheet(name).Rows()
 }
 
-// Walk opens path and calls fn for each row in one sheet.
+// Walk opens path and calls fn for each row in one sheet. The index passed to
+// fn is 1-based to match spreadsheet row numbering.
 func Walk(path, name string, fn func(int, []string) error) (err error) {
+	if fn == nil {
+		return errNilCallback
+	}
+
 	wb, err := Open(path)
 	if err != nil {
 		return err
@@ -65,7 +77,12 @@ func Walk(path, name string, fn func(int, []string) error) (err error) {
 }
 
 // ScanRow parses each row into T and calls fn for rows that parse successfully.
+// The index passed to fn is 1-based. Rows that fail to parse are skipped.
 func ScanRow[T any](path, name string, fn func(int, *T) error) (err error) {
+	if fn == nil {
+		return errNilCallback
+	}
+
 	wb, err := Open(path)
 	if err != nil {
 		return err
@@ -85,7 +102,9 @@ func ScanRow[T any](path, name string, fn func(int, *T) error) (err error) {
 	})
 }
 
-// ScanAll parses all rows in a sheet into T. Rows that fail to parse are nil.
+// ScanAll parses all rows in a sheet into T. Rows that fail to parse produce
+// nil entries; the index of each entry matches the 0-based row offset in the
+// sheet.
 func ScanAll[T any](path, name string) (result []*T, err error) {
 	wb, err := Open(path)
 	if err != nil {
@@ -135,13 +154,12 @@ func Parse[T any](row []string) (*T, error) {
 	return result, nil
 }
 
-// Workbook wraps an opened Excel file.
 type Workbook struct {
 	path string
 	file *excelize.File
 }
 
-// Open opens an Excel workbook at path.
+// Open opens an Excel workbook at path. Call Close when the workbook is no longer needed.
 func Open(path string) (*Workbook, error) {
 	f, err := excelize.OpenFile(path)
 	if err != nil {
@@ -150,7 +168,6 @@ func Open(path string) (*Workbook, error) {
 	return &Workbook{path: path, file: f}, nil
 }
 
-// Close closes the underlying workbook file.
 func (w *Workbook) Close() error {
 	if w.file != nil {
 		return w.file.Close()
@@ -158,7 +175,6 @@ func (w *Workbook) Close() error {
 	return nil
 }
 
-// Sheets returns all sheet names in the workbook.
 func (w *Workbook) Sheets() []string {
 	if w.file == nil {
 		return []string{}
@@ -166,12 +182,10 @@ func (w *Workbook) Sheets() []string {
 	return w.file.GetSheetList()
 }
 
-// Sheet returns a sheet handle by name.
 func (w *Workbook) Sheet(name string) *Sheet {
 	return &Sheet{file: w.file, name: name}
 }
 
-// ReadAll returns all workbook sheets keyed by sheet name.
 func (w *Workbook) ReadAll() (map[string][][]string, error) {
 	sheets := w.Sheets()
 	result := make(map[string][][]string, len(sheets))
@@ -187,19 +201,22 @@ func (w *Workbook) ReadAll() (map[string][][]string, error) {
 	return result, nil
 }
 
-// Sheet provides row access for one workbook sheet.
 type Sheet struct {
 	file *excelize.File
 	name string
 }
 
-// Rows returns all rows in the sheet.
 func (s *Sheet) Rows() ([][]string, error) {
 	return s.file.GetRows(s.name)
 }
 
-// Scan streams sheet rows and stops when fn returns an error.
+// Scan streams sheet rows and stops when fn returns an error. The index
+// passed to fn is 1-based to match spreadsheet row numbering.
 func (s *Sheet) Scan(fn func(idx int, row []string) error) (err error) {
+	if fn == nil {
+		return errNilCallback
+	}
+
 	rows, err := s.file.Rows(s.name)
 	if err != nil {
 		return err
@@ -224,7 +241,6 @@ func (s *Sheet) Scan(fn func(idx int, row []string) error) (err error) {
 	return rows.Error()
 }
 
-// Row represents one row of cell values.
 type Row struct {
 	values []string
 	index  int
@@ -248,7 +264,6 @@ func (r *Row) Value(col int) string {
 	return r.values[col]
 }
 
-// Len returns the number of values in the row.
 func (r *Row) Len() int {
 	return len(r.values)
 }
@@ -268,7 +283,7 @@ func getStructInfo[T any]() (structInfo, error) {
 
 	typ := reflect.TypeOf(t)
 	if typ == nil {
-		return structInfo{}, errors.New("excel: target must be struct or pointer to struct")
+		return structInfo{}, errInvalidTarget
 	}
 
 	ptr := false
@@ -278,7 +293,7 @@ func getStructInfo[T any]() (structInfo, error) {
 		elem = typ.Elem()
 	}
 	if elem.Kind() != reflect.Struct {
-		return structInfo{}, fmt.Errorf("excel: target must be struct or pointer to struct, got %v", typ)
+		return structInfo{}, fmt.Errorf("%w: got %v", errInvalidTarget, typ)
 	}
 
 	if info, ok := structCache.Load(typ); ok {
@@ -315,7 +330,7 @@ func buildFieldIndex(typ reflect.Type) (map[int]fieldInfo, error) {
 			return nil, fmt.Errorf("field %s: %w", field.Name, err)
 		}
 		if field.PkgPath != "" {
-			return nil, fmt.Errorf("field %s: field is unexported", field.Name)
+			return nil, fmt.Errorf("field %s: %w", field.Name, errUnexported)
 		}
 
 		index[col] = fieldInfo{index: i}
@@ -328,13 +343,13 @@ func columnIndex(col string) (int, error) {
 	col = strings.ToUpper(col)
 
 	if col == "" {
-		return 0, errors.New("column name is empty")
+		return 0, errEmptyColumn
 	}
 
 	n := 0
 	for _, c := range col {
 		if c < 'A' || c > 'Z' {
-			return 0, fmt.Errorf("invalid column: %q", col)
+			return 0, fmt.Errorf("%w: %q", errInvalidColumn, col)
 		}
 		n = n*26 + int(c-'A'+1)
 	}
@@ -399,7 +414,7 @@ func parseValue(v reflect.Value, s string) error {
 			return fmt.Errorf("parse int %q: %w", s, err)
 		}
 		if v.OverflowInt(n) {
-			return fmt.Errorf("parse int %q: overflows %v", s, v.Type())
+			return fmt.Errorf("parse int %q: %w: %v", s, errValueOverflow, v.Type())
 		}
 		v.SetInt(n)
 
@@ -409,7 +424,7 @@ func parseValue(v reflect.Value, s string) error {
 			return fmt.Errorf("parse uint %q: %w", s, err)
 		}
 		if v.OverflowUint(n) {
-			return fmt.Errorf("parse uint %q: overflows %v", s, v.Type())
+			return fmt.Errorf("parse uint %q: %w: %v", s, errValueOverflow, v.Type())
 		}
 		v.SetUint(n)
 
@@ -419,7 +434,7 @@ func parseValue(v reflect.Value, s string) error {
 			return fmt.Errorf("parse float %q: %w", s, err)
 		}
 		if v.OverflowFloat(n) {
-			return fmt.Errorf("parse float %q: overflows %v", s, v.Type())
+			return fmt.Errorf("parse float %q: %w: %v", s, errValueOverflow, v.Type())
 		}
 		v.SetFloat(n)
 
@@ -431,7 +446,7 @@ func parseValue(v reflect.Value, s string) error {
 		v.SetBool(n)
 
 	default:
-		return fmt.Errorf("unsupported type: %v", v.Type())
+		return fmt.Errorf("%w: %v", errUnsupported, v.Type())
 	}
 
 	return nil
