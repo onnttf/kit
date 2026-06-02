@@ -1,0 +1,36 @@
+concurrent/backoff.go
+  s_939c06ab265ea4::t_a3dea0162e7a0b 3,15,29,43-55,58-62,64
+  s_939c06ab265ea4::t_2c111289a5c266 67,69,71
+download/download.go
+  s_939c06ab265ea4::t_a3dea0162e7a0b 119,208,292-294
+concurrent/result.go
+  s_939c06ab265ea4::t_deaf77ee28151d 20-25
+concurrent/policy_test.go
+  s_939c06ab265ea4::t_d5f7dd9d56923f 80-81,83,86,88,93,95,98
+concurrent/backoff_test.go
+  s_939c06ab265ea4::t_590acd61ad0e30 38-42,65-67
+  s_939c06ab265ea4::t_5fe16d2665139f 73
+concurrent/executor.go
+  s_939c06ab265ea4::t_a3dea0162e7a0b 31-34,86
+concurrent/result_test.go
+  s_939c06ab265ea4::t_7bcc893c1138e5 9
+  s_939c06ab265ea4::t_590acd61ad0e30 4,73-84
+download/download_test.go
+  s_939c06ab265ea4::t_590acd61ad0e30 6,211-232,267-290
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "fd8fb4314f043aca56a9465d235f816638b60867",
+  "prompts": {},
+  "sessions": {
+    "s_939c06ab265ea4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e8606-f0cc-7e31-b69b-fbfcf5a71854",
+        "model": "gpt-5.5"
+      },
+      "human_author": "ZHANG PENG <onnttf@gmail.com>"
+    }
+  }
+}
