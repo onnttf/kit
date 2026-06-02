@@ -8,12 +8,10 @@ type Flattener[T any, K comparable] struct {
 	parentFn func(T, K) T
 }
 
-// NewFlattener returns an empty flattener.
 func NewFlattener[T any, K comparable]() *Flattener[T, K] {
 	return &Flattener[T, K]{}
 }
 
-// KeyBy sets the function used to derive an item key.
 func (f *Flattener[T, K]) KeyBy(fn func(T) K) *Flattener[T, K] {
 	f.keyFn = fn
 	return f

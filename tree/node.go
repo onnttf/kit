@@ -1,6 +1,5 @@
 package tree
 
-// Node is an immutable tree node returned from built trees.
 type Node[T any] struct {
 	Item     T
 	Children []*Node[T]

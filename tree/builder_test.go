@@ -43,13 +43,15 @@ func TestBuilder_WithItems(t *testing.T) {
 
 func TestBuilder_AddItem(t *testing.T) {
 	b := NewBuilder[TestItem, int]()
-	b.AddItem(TestItem{ID: 1, Name: "Item"})
+	result := b.AddItem(TestItem{ID: 1, Name: "Item"})
+	assert.Same(t, b, result)
 	assert.Len(t, b.items, 1)
 }
 
 func TestBuilder_AddItemWithParent(t *testing.T) {
 	b := NewBuilder[TestItem, int]()
-	b.AddItemWithParent(TestItem{ID: 2, Name: "Child"}, 1)
+	result := b.AddItemWithParent(TestItem{ID: 2, Name: "Child"}, 1)
+	assert.Same(t, b, result)
 	require.Len(t, b.items, 1)
 	assert.Equal(t, 2, b.items[0].data.ID)
 	assert.True(t, b.items[0].hasParent)
@@ -382,8 +384,7 @@ func TestBuilder_MoveItem(t *testing.T) {
 	})
 
 	err := b.MoveItem(1, 1)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "self-move not allowed")
+	assert.ErrorIs(t, err, ErrInvalidMove)
 
 	err = b.MoveItem(1, 3)
 	assert.ErrorIs(t, err, ErrCycle)
@@ -404,12 +405,10 @@ func TestBuilder_MoveItem_Errors(t *testing.T) {
 	b.WithItems([]TestItem{{ID: 1, Name: "Root", ParentID: 1}})
 
 	err := b.MoveItem(999, 1)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "key not found")
+	assert.ErrorIs(t, err, ErrKeyNotFound)
 
 	err = b.MoveItem(1, 999)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "parent key not found")
+	assert.ErrorIs(t, err, ErrKeyNotFound)
 }
 
 func TestBuilder_DepthAndChildrenOf(t *testing.T) {

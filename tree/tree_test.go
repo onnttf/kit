@@ -112,6 +112,27 @@ func TestTree_Walk_ClonePreservesLevel(t *testing.T) {
 	assert.Equal(t, []int{1, 2}, levels)
 }
 
+func TestTree_CloneIndexesClonedNodes(t *testing.T) {
+	b := NewBuilder[TestItem, int]()
+	b.KeyBy(keyFn).ParentBy(parentFn).WithItems([]TestItem{
+		{ID: 1, Name: "Root"},
+		{ID: 2, Name: "Child", ParentID: 1},
+	})
+	tree, err := b.Build()
+	require.NoError(t, err)
+
+	cloned := tree.Clone()
+	cloned.cache[1].Item.Name = "Changed"
+
+	roots := cloned.Roots()
+	require.Len(t, roots, 1)
+	assert.Equal(t, "Changed", roots[0].Item.Name)
+
+	original, ok := tree.Get(1)
+	require.True(t, ok)
+	assert.Equal(t, "Root", original.Item.Name)
+}
+
 func TestTree_Map_PreservesLevel(t *testing.T) {
 	b := NewBuilder[TestItem, int]()
 	b.KeyBy(keyFn).ParentBy(parentFn).WithItems([]TestItem{

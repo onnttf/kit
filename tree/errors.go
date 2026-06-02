@@ -11,4 +11,8 @@ var (
 	ErrOrphanedNode = errors.New("orphaned node")
 	// ErrCycle reports a parent relationship cycle.
 	ErrCycle = errors.New("cycle detected")
+	// ErrKeyNotFound reports that an operation referenced a missing key.
+	ErrKeyNotFound = errors.New("key not found")
+	// ErrInvalidMove reports an invalid tree move request.
+	ErrInvalidMove = errors.New("invalid move")
 )

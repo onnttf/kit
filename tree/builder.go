@@ -14,26 +14,513 @@ type item[T any, K comparable] struct {
 	insertOrder int
 }
 
-// Builder incrementally builds a validated immutable Tree.
+// Builder incrementally builds a validated Tree.
 type Builder[T any, K comparable] struct {
 	mu    sync.RWMutex
 	items []*item[T, K]
 
 	insertCtr int
 
-	keyFn        func(T) K
-	parentFn     func(T) (K, bool)
-	sortFn       func(T) int
-	sortCmpFn    func(T, T) int
-	sortByInsert bool
+	keyFn     func(T) K
+	parentFn  func(T) (K, bool)
+	sortFn    func(T) int
+	sortCmpFn func(T, T) int
 
 	dirty  bool
 	cached *Tree[T, K]
 }
 
-// NewBuilder returns an empty tree builder.
 func NewBuilder[T any, K comparable]() *Builder[T, K] {
 	return &Builder[T, K]{dirty: true}
+}
+
+// AddItem appends v as an item whose parent is resolved by ParentBy.
+func (b *Builder[T, K]) AddItem(v T) *Builder[T, K] {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.items = append(b.items, &item[T, K]{
+		data:        v,
+		insertOrder: b.insertCtr,
+	})
+	b.insertCtr++
+	b.invalidate()
+	return b
+}
+
+// AddItemWithParent appends v with an explicit parent key.
+func (b *Builder[T, K]) AddItemWithParent(v T, parentKey K) *Builder[T, K] {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.items = append(b.items, &item[T, K]{
+		data:        v,
+		parentKey:   parentKey,
+		hasParent:   true,
+		insertOrder: b.insertCtr,
+	})
+	b.insertCtr++
+	b.invalidate()
+	return b
+}
+
+func (b *Builder[T, K]) WithItems(items []T) *Builder[T, K] {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, v := range items {
+		b.items = append(b.items, &item[T, K]{data: v, insertOrder: b.insertCtr})
+		b.insertCtr++
+	}
+	b.invalidate()
+	return b
+}
+
+func (b *Builder[T, K]) KeyBy(fn func(T) K) *Builder[T, K] {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.keyFn = fn
+	b.invalidate()
+	return b
+}
+
+func (b *Builder[T, K]) ParentBy(fn func(T) (K, bool)) *Builder[T, K] {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.parentFn = fn
+	b.invalidate()
+	return b
+}
+
+func (b *Builder[T, K]) SortBy(fn func(T) int) *Builder[T, K] {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.sortFn = fn
+	b.sortCmpFn = nil
+	b.invalidate()
+	return b
+}
+
+func (b *Builder[T, K]) SortByFunc(fn func(T, T) int) *Builder[T, K] {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.sortCmpFn = fn
+	b.sortFn = nil
+	b.invalidate()
+	return b
+}
+
+func (b *Builder[T, K]) invalidate() {
+	b.dirty = true
+	b.cached = nil
+}
+
+// Build returns a tree after validating keys and parent relationships.
+func (b *Builder[T, K]) Build() (*Tree[T, K], error) {
+	return b.ensureTree()
+}
+
+// Clone returns a builder copy that can be mutated independently.
+func (b *Builder[T, K]) Clone() *Builder[T, K] {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	items := make([]*item[T, K], len(b.items))
+	for i, n := range b.items {
+		items[i] = &item[T, K]{
+			data:        n.data,
+			parentKey:   n.parentKey,
+			hasParent:   n.hasParent,
+			insertOrder: n.insertOrder,
+		}
+	}
+
+	return &Builder[T, K]{
+		items:     items,
+		insertCtr: b.insertCtr,
+		keyFn:     b.keyFn,
+		parentFn:  b.parentFn,
+		sortFn:    b.sortFn,
+		sortCmpFn: b.sortCmpFn,
+		dirty:     true,
+	}
+}
+
+func (b *Builder[T, K]) Statistics() (Stats, error) {
+	tree, err := b.Build()
+	if err != nil {
+		return Stats{}, err
+	}
+	return tree.Stats(), nil
+}
+
+// Validate returns all validation errors it can collect without building a tree.
+func (b *Builder[T, K]) Validate() []error {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if b.keyFn == nil {
+		return []error{ErrKeyNotSet}
+	}
+
+	var errs []error
+
+	count := len(b.items)
+	keys := make([]K, count)
+	keyIndex := make(map[K]int, count)
+	parentKeys := make([]K, count)
+	hasParents := make([]bool, count)
+
+	for i, n := range b.items {
+		k := b.keyFn(n.data)
+		keys[i] = k
+
+		if _, ok := keyIndex[k]; ok {
+			errs = append(errs, fmt.Errorf("%w: %v", ErrDuplicateKey, k))
+		}
+		keyIndex[k] = i
+
+		pk, has := b.resolveParent(n, k)
+		parentKeys[i] = pk
+		hasParents[i] = has
+	}
+
+	for i, k := range keys {
+		if hasParents[i] {
+			if _, ok := keyIndex[parentKeys[i]]; !ok {
+				errs = append(errs, fmt.Errorf("%w: %v", ErrOrphanedNode, k))
+			}
+		}
+	}
+
+	if cycleKey, found := detectCycle(keys, parentKeys, hasParents, keyIndex); found {
+		errs = append(errs, fmt.Errorf("%w: %v", ErrCycle, cycleKey))
+	}
+
+	return errs
+}
+
+func (b *Builder[T, K]) Filter(fn func(T) bool) *Builder[T, K] {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	var filtered []*item[T, K]
+	for _, n := range b.items {
+		if fn(n.data) {
+			cp := *n
+			filtered = append(filtered, &cp)
+		}
+	}
+
+	clone := &Builder[T, K]{
+		items:     filtered,
+		insertCtr: b.insertCtr,
+		keyFn:     b.keyFn,
+		parentFn:  b.parentFn,
+		sortFn:    b.sortFn,
+		sortCmpFn: b.sortCmpFn,
+		dirty:     true,
+	}
+	return clone
+}
+
+func (b *Builder[T, K]) Map(fn func(T) T, keyFn func(T) K) *Builder[T, K] {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	mapped := make([]*item[T, K], len(b.items))
+	for i, n := range b.items {
+		mapped[i] = &item[T, K]{
+			data:        fn(n.data),
+			parentKey:   n.parentKey,
+			hasParent:   n.hasParent,
+			insertOrder: n.insertOrder,
+		}
+	}
+
+	return &Builder[T, K]{
+		items:     mapped,
+		insertCtr: b.insertCtr,
+		keyFn:     keyFn,
+		parentFn:  b.parentFn,
+		sortFn:    b.sortFn,
+		sortCmpFn: b.sortCmpFn,
+		dirty:     true,
+	}
+}
+
+// Transform mutates each stored item in place and invalidates the cached tree.
+func (b *Builder[T, K]) Transform(fn func(*T)) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, n := range b.items {
+		fn(&n.data)
+	}
+	b.invalidate()
+}
+
+func (b *Builder[T, K]) Find(fn func(T) bool) (*Node[T], error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	for _, n := range b.items {
+		if fn(n.data) {
+			return &Node[T]{Item: n.data}, nil
+		}
+	}
+	return nil, fmt.Errorf("item not found")
+}
+
+// ContainsKey reports whether key exists. It returns ErrKeyNotSet without KeyBy.
+func (b *Builder[T, K]) ContainsKey(key K) (bool, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if b.keyFn == nil {
+		return false, ErrKeyNotSet
+	}
+
+	for _, n := range b.items {
+		if b.keyFn(n.data) == key {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (b *Builder[T, K]) ContainsItem(fn func(T) bool) bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if fn == nil {
+		return false
+	}
+
+	for _, n := range b.items {
+		if fn(n.data) {
+			return true
+		}
+	}
+	return false
+}
+
+func (b *Builder[T, K]) UpdateItem(key K, fn func(*T)) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.keyFn == nil {
+		return ErrKeyNotSet
+	}
+
+	idx := -1
+	for i, n := range b.items {
+		if b.keyFn(n.data) == key {
+			idx = i
+			break
+		}
+	}
+
+	if idx == -1 {
+		return fmt.Errorf("key not found: %v", key)
+	}
+
+	oldItem := b.items[idx].data
+	fn(&b.items[idx].data)
+	newKey := b.keyFn(b.items[idx].data)
+
+	if newKey != key {
+		for i, n := range b.items {
+			if i != idx && b.keyFn(n.data) == newKey {
+				b.items[idx].data = oldItem
+				return fmt.Errorf("%w: %v", ErrDuplicateKey, newKey)
+			}
+		}
+	}
+
+	b.invalidate()
+	return nil
+}
+
+// ChildrenOf returns copies of the direct children for key.
+func (b *Builder[T, K]) ChildrenOf(key K) ([]*Node[T], error) {
+	tree, err := b.ensureTree()
+	if err != nil {
+		return nil, err
+	}
+
+	parentNode, ok := tree.cache[key]
+	if !ok {
+		return nil, fmt.Errorf("%w: %v", ErrKeyNotFound, key)
+	}
+
+	result := make([]*Node[T], len(parentNode.Children))
+	for i, c := range parentNode.Children {
+		result[i] = cloneNode(c)
+	}
+	return result, nil
+}
+
+// Depth returns the 1-based tree depth for key.
+func (b *Builder[T, K]) Depth(key K) (int, error) {
+	tree, err := b.ensureTree()
+	if err != nil {
+		return 0, err
+	}
+
+	node, ok := tree.cache[key]
+	if !ok {
+		return 0, fmt.Errorf("%w: %v", ErrKeyNotFound, key)
+	}
+
+	return node.Level, nil
+}
+
+func (b *Builder[T, K]) IsDescendant(ancestor, key K) (bool, error) {
+	tree, err := b.ensureTree()
+	if err != nil {
+		return false, err
+	}
+
+	if _, ok := tree.cache[key]; !ok {
+		return false, fmt.Errorf("%w: %v", ErrKeyNotFound, key)
+	}
+	if _, ok := tree.cache[ancestor]; !ok {
+		return false, fmt.Errorf("ancestor: %w: %v", ErrKeyNotFound, ancestor)
+	}
+
+	if key == ancestor {
+		return true, nil
+	}
+
+	cur := key
+	for {
+		pk, ok := tree.parentIdx[cur]
+		if !ok {
+			return false, nil
+		}
+		if pk == ancestor {
+			return true, nil
+		}
+		cur = pk
+	}
+}
+
+// RemoveItem removes key and all of its descendants.
+func (b *Builder[T, K]) RemoveItem(key K) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.keyFn == nil {
+		return ErrKeyNotSet
+	}
+
+	allKeys := make(map[K]struct{}, len(b.items))
+	childIdx := make(map[K][]K, len(b.items))
+	for _, n := range b.items {
+		k := b.keyFn(n.data)
+		allKeys[k] = struct{}{}
+		pk, has := b.resolveParent(n, k)
+		if has {
+			childIdx[pk] = append(childIdx[pk], k)
+		}
+	}
+
+	if _, ok := allKeys[key]; !ok {
+		return fmt.Errorf("%w: %v", ErrKeyNotFound, key)
+	}
+
+	keysToRemove := make(map[K]struct{})
+	stack := []K{key}
+	for len(stack) > 0 {
+		k := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if _, seen := keysToRemove[k]; seen {
+			continue
+		}
+		keysToRemove[k] = struct{}{}
+		stack = append(stack, childIdx[k]...)
+	}
+
+	remaining := b.items[:0:0]
+	for _, n := range b.items {
+		if _, drop := keysToRemove[b.keyFn(n.data)]; !drop {
+			remaining = append(remaining, n)
+		}
+	}
+
+	b.items = remaining
+	b.invalidate()
+	return nil
+}
+
+func (b *Builder[T, K]) MoveItem(key, newParent K) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.keyFn == nil {
+		return ErrKeyNotSet
+	}
+
+	if key == newParent {
+		return fmt.Errorf("%w: self move", ErrInvalidMove)
+	}
+
+	keyIndex := make(map[K]int, len(b.items))
+	for i, n := range b.items {
+		k := b.keyFn(n.data)
+		keyIndex[k] = i
+	}
+
+	if _, ok := keyIndex[key]; !ok {
+		return fmt.Errorf("%w: %v", ErrKeyNotFound, key)
+	}
+	if _, ok := keyIndex[newParent]; !ok {
+		return fmt.Errorf("parent: %w: %v", ErrKeyNotFound, newParent)
+	}
+
+	ancestors := make(map[K]bool)
+	cur := newParent
+	for {
+		ancestors[cur] = true
+		idx, ok := keyIndex[cur]
+		if !ok {
+			break
+		}
+		n := b.items[idx]
+		pk, has := b.resolveParent(n, b.keyFn(n.data))
+		if !has {
+			break
+		}
+		cur = pk
+	}
+
+	if ancestors[key] {
+		return fmt.Errorf("%w: %v", ErrCycle, key)
+	}
+
+	for _, n := range b.items {
+		if b.keyFn(n.data) == key {
+			n.parentKey = newParent
+			n.hasParent = true
+			break
+		}
+	}
+
+	b.invalidate()
+	return nil
+}
+
+// Subtree returns the subtree rooted at key.
+func (b *Builder[T, K]) Subtree(key K) (*Tree[T, K], error) {
+	tree, err := b.ensureTree()
+	if err != nil {
+		return nil, err
+	}
+
+	subtree, ok := tree.Subtree(key)
+	if !ok {
+		return nil, fmt.Errorf("%w: %v", ErrKeyNotFound, key)
+	}
+	return subtree, nil
 }
 
 func (b *Builder[T, K]) resolveParent(n *item[T, K], selfKey K) (K, bool) {
@@ -176,548 +663,6 @@ func assignLevels[T any](nodes []*Node[T], level int) {
 	}
 }
 
-// AddItem appends v as an item whose parent is resolved by ParentBy.
-func (b *Builder[T, K]) AddItem(v T) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	b.items = append(b.items, &item[T, K]{
-		data:        v,
-		insertOrder: b.insertCtr,
-	})
-	b.insertCtr++
-	b.invalidate()
-}
-
-// AddItemWithParent appends v with an explicit parent key.
-func (b *Builder[T, K]) AddItemWithParent(v T, parentKey K) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	b.items = append(b.items, &item[T, K]{
-		data:        v,
-		parentKey:   parentKey,
-		hasParent:   true,
-		insertOrder: b.insertCtr,
-	})
-	b.insertCtr++
-	b.invalidate()
-}
-
-// WithItems appends all items and returns b.
-func (b *Builder[T, K]) WithItems(items []T) *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for _, v := range items {
-		b.items = append(b.items, &item[T, K]{data: v, insertOrder: b.insertCtr})
-		b.insertCtr++
-	}
-	b.invalidate()
-	return b
-}
-
-// KeyBy sets the function used to derive unique item keys.
-func (b *Builder[T, K]) KeyBy(fn func(T) K) *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.keyFn = fn
-	b.invalidate()
-	return b
-}
-
-// ParentBy sets the function used to resolve parent keys.
-func (b *Builder[T, K]) ParentBy(fn func(T) (K, bool)) *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.parentFn = fn
-	b.invalidate()
-	return b
-}
-
-// SortBy sorts siblings by the integer returned from fn.
-func (b *Builder[T, K]) SortBy(fn func(T) int) *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.sortFn = fn
-	b.sortByInsert = false
-	b.invalidate()
-	return b
-}
-
-// SortByFunc sorts siblings using fn.
-func (b *Builder[T, K]) SortByFunc(fn func(T, T) int) *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.sortCmpFn = fn
-	b.sortByInsert = false
-	b.invalidate()
-	return b
-}
-
-func (b *Builder[T, K]) invalidate() {
-	b.dirty = true
-	b.cached = nil
-}
-
-// Build returns an immutable tree after validating keys and parent relationships.
-func (b *Builder[T, K]) Build() (*Tree[T, K], error) {
-	return b.ensureTree()
-}
-
-// Clone returns a builder copy that can be mutated independently.
-func (b *Builder[T, K]) Clone() *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	items := make([]*item[T, K], len(b.items))
-	for i, n := range b.items {
-		items[i] = &item[T, K]{
-			data:        n.data,
-			parentKey:   n.parentKey,
-			hasParent:   n.hasParent,
-			insertOrder: n.insertOrder,
-		}
-	}
-
-	return &Builder[T, K]{
-		items:        items,
-		insertCtr:    b.insertCtr,
-		keyFn:        b.keyFn,
-		parentFn:     b.parentFn,
-		sortFn:       b.sortFn,
-		sortCmpFn:    b.sortCmpFn,
-		sortByInsert: b.sortByInsert,
-		dirty:        true,
-	}
-}
-
-// Statistics builds the tree and returns its Stats.
-func (b *Builder[T, K]) Statistics() (Stats, error) {
-	tree, err := b.Build()
-	if err != nil {
-		return Stats{}, err
-	}
-	return tree.Stats(), nil
-}
-
-// Validate returns all validation errors it can collect without building a tree.
-func (b *Builder[T, K]) Validate() []error {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	if b.keyFn == nil {
-		return []error{ErrKeyNotSet}
-	}
-
-	var errs []error
-
-	count := len(b.items)
-	keys := make([]K, count)
-	keyIndex := make(map[K]int, count)
-	parentKeys := make([]K, count)
-	hasParents := make([]bool, count)
-
-	for i, n := range b.items {
-		k := b.keyFn(n.data)
-		keys[i] = k
-
-		if _, ok := keyIndex[k]; ok {
-			errs = append(errs, fmt.Errorf("%w: %v", ErrDuplicateKey, k))
-		}
-		keyIndex[k] = i
-
-		pk, has := b.resolveParent(n, k)
-		parentKeys[i] = pk
-		hasParents[i] = has
-	}
-
-	for i, k := range keys {
-		if hasParents[i] {
-			if _, ok := keyIndex[parentKeys[i]]; !ok {
-				errs = append(errs, fmt.Errorf("%w: %v", ErrOrphanedNode, k))
-			}
-		}
-	}
-
-	type color uint8
-	const (
-		colorWhite color = iota
-		colorGray
-		colorBlack
-	)
-
-	colors := make(map[K]color, len(keys))
-	for _, start := range keys {
-		if colors[start] != colorWhite {
-			continue
-		}
-
-		cur := start
-		visited := []K{}
-		for colors[cur] == colorWhite {
-			colors[cur] = colorGray
-			visited = append(visited, cur)
-
-			idx, ok := keyIndex[cur]
-			if !ok || !hasParents[idx] {
-				break
-			}
-
-			if colors[parentKeys[idx]] == colorGray {
-				errs = append(errs, fmt.Errorf("%w: %v", ErrCycle, parentKeys[idx]))
-				break
-			}
-			cur = parentKeys[idx]
-		}
-
-		for _, k := range visited {
-			colors[k] = colorBlack
-		}
-	}
-
-	return errs
-}
-
-// Filter returns a new builder containing items that match fn.
-func (b *Builder[T, K]) Filter(fn func(T) bool) *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	var filtered []*item[T, K]
-	for _, n := range b.items {
-		if fn(n.data) {
-			cp := *n
-			filtered = append(filtered, &cp)
-		}
-	}
-
-	clone := &Builder[T, K]{
-		items:        filtered,
-		insertCtr:    b.insertCtr,
-		keyFn:        b.keyFn,
-		parentFn:     b.parentFn,
-		sortFn:       b.sortFn,
-		sortCmpFn:    b.sortCmpFn,
-		sortByInsert: b.sortByInsert,
-		dirty:        true,
-	}
-	return clone
-}
-
-// Map returns a new builder with each item transformed by fn.
-func (b *Builder[T, K]) Map(fn func(T) T, keyFn func(T) K) *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	mapped := make([]*item[T, K], len(b.items))
-	for i, n := range b.items {
-		mapped[i] = &item[T, K]{
-			data:        fn(n.data),
-			parentKey:   n.parentKey,
-			hasParent:   n.hasParent,
-			insertOrder: n.insertOrder,
-		}
-	}
-
-	return &Builder[T, K]{
-		items:        mapped,
-		insertCtr:    b.insertCtr,
-		keyFn:        keyFn,
-		parentFn:     b.parentFn,
-		sortFn:       b.sortFn,
-		sortCmpFn:    b.sortCmpFn,
-		sortByInsert: b.sortByInsert,
-		dirty:        true,
-	}
-}
-
-// Transform mutates each stored item in place and invalidates the cached tree.
-func (b *Builder[T, K]) Transform(fn func(*T)) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for _, n := range b.items {
-		fn(&n.data)
-	}
-	b.invalidate()
-}
-
-// Find returns the first item matching fn as a single node.
-func (b *Builder[T, K]) Find(fn func(T) bool) (*Node[T], error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	for _, n := range b.items {
-		if fn(n.data) {
-			return &Node[T]{Item: n.data}, nil
-		}
-	}
-	return nil, fmt.Errorf("item not found")
-}
-
-// ContainsKey reports whether key exists. It returns ErrKeyNotSet without KeyBy.
-func (b *Builder[T, K]) ContainsKey(key K) (bool, error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	if b.keyFn == nil {
-		return false, ErrKeyNotSet
-	}
-
-	for _, n := range b.items {
-		if b.keyFn(n.data) == key {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// ContainsItem reports whether any item matches fn.
-func (b *Builder[T, K]) ContainsItem(fn func(T) bool) bool {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	if fn == nil {
-		return false
-	}
-
-	for _, n := range b.items {
-		if fn(n.data) {
-			return true
-		}
-	}
-	return false
-}
-
-// UpdateItem mutates the item identified by key.
-func (b *Builder[T, K]) UpdateItem(key K, fn func(*T)) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if b.keyFn == nil {
-		return ErrKeyNotSet
-	}
-
-	idx := -1
-	for i, n := range b.items {
-		if b.keyFn(n.data) == key {
-			idx = i
-			break
-		}
-	}
-
-	if idx == -1 {
-		return fmt.Errorf("key not found: %v", key)
-	}
-
-	oldItem := b.items[idx].data
-	fn(&b.items[idx].data)
-	newKey := b.keyFn(b.items[idx].data)
-
-	if newKey != key {
-		for i, n := range b.items {
-			if i != idx && b.keyFn(n.data) == newKey {
-				b.items[idx].data = oldItem
-				return fmt.Errorf("%w: %v", ErrDuplicateKey, newKey)
-			}
-		}
-	}
-
-	b.invalidate()
-	return nil
-}
-
-// ChildrenOf returns copies of the direct children for key.
-func (b *Builder[T, K]) ChildrenOf(key K) ([]*Node[T], error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	tree, err := b.buildTree()
-	if err != nil {
-		return nil, err
-	}
-
-	parentNode, ok := tree.cache[key]
-	if !ok {
-		return nil, fmt.Errorf("key not found: %v", key)
-	}
-
-	result := make([]*Node[T], len(parentNode.Children))
-	for i, c := range parentNode.Children {
-		result[i] = cloneNode(c)
-	}
-	return result, nil
-}
-
-// Depth returns the 1-based tree depth for key.
-func (b *Builder[T, K]) Depth(key K) (int, error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	tree, err := b.buildTree()
-	if err != nil {
-		return 0, err
-	}
-
-	node, ok := tree.cache[key]
-	if !ok {
-		return 0, fmt.Errorf("key not found: %v", key)
-	}
-
-	return node.Level, nil
-}
-
-// IsDescendant reports whether key is under ancestor.
-func (b *Builder[T, K]) IsDescendant(ancestor, key K) (bool, error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	tree, err := b.buildTree()
-	if err != nil {
-		return false, err
-	}
-
-	if _, ok := tree.cache[key]; !ok {
-		return false, fmt.Errorf("key not found: %v", key)
-	}
-	if _, ok := tree.cache[ancestor]; !ok {
-		return false, fmt.Errorf("ancestor not found: %v", ancestor)
-	}
-
-	if key == ancestor {
-		return true, nil
-	}
-
-	cur := key
-	for {
-		pk, ok := tree.parentIdx[cur]
-		if !ok {
-			return false, nil
-		}
-		if pk == ancestor {
-			return true, nil
-		}
-		cur = pk
-	}
-}
-
-// RemoveItem removes key and all of its descendants.
-func (b *Builder[T, K]) RemoveItem(key K) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if b.keyFn == nil {
-		return ErrKeyNotSet
-	}
-
-	keyIndex := make(map[K]int, len(b.items))
-	for i, n := range b.items {
-		keyIndex[b.keyFn(n.data)] = i
-	}
-
-	if _, ok := keyIndex[key]; !ok {
-		return fmt.Errorf("key not found: %v", key)
-	}
-
-	keysToRemove := make(map[K]bool)
-	var collect func(k K)
-	collect = func(k K) {
-		keysToRemove[k] = true
-		for _, n := range b.items {
-			pk, has := b.resolveParent(n, b.keyFn(n.data))
-			if has && pk == k {
-				collect(b.keyFn(n.data))
-			}
-		}
-	}
-	collect(key)
-
-	var remaining []*item[T, K]
-	for _, n := range b.items {
-		if !keysToRemove[b.keyFn(n.data)] {
-			remaining = append(remaining, n)
-		}
-	}
-
-	b.items = remaining
-	b.invalidate()
-	return nil
-}
-
-// MoveItem moves key under newParent.
-func (b *Builder[T, K]) MoveItem(key, newParent K) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if b.keyFn == nil {
-		return ErrKeyNotSet
-	}
-
-	if key == newParent {
-		return fmt.Errorf("self-move not allowed")
-	}
-
-	keyIndex := make(map[K]int, len(b.items))
-	for i, n := range b.items {
-		k := b.keyFn(n.data)
-		keyIndex[k] = i
-	}
-
-	if _, ok := keyIndex[key]; !ok {
-		return fmt.Errorf("key not found: %v", key)
-	}
-	if _, ok := keyIndex[newParent]; !ok {
-		return fmt.Errorf("parent key not found: %v", newParent)
-	}
-
-	ancestors := make(map[K]bool)
-	cur := newParent
-	for {
-		ancestors[cur] = true
-		idx, ok := keyIndex[cur]
-		if !ok {
-			break
-		}
-		n := b.items[idx]
-		pk, has := b.resolveParent(n, b.keyFn(n.data))
-		if !has {
-			break
-		}
-		cur = pk
-	}
-
-	if ancestors[key] {
-		return fmt.Errorf("%w: %v", ErrCycle, key)
-	}
-
-	for _, n := range b.items {
-		if b.keyFn(n.data) == key {
-			n.parentKey = newParent
-			n.hasParent = true
-			break
-		}
-	}
-
-	b.invalidate()
-	return nil
-}
-
-// Subtree returns the subtree rooted at key.
-func (b *Builder[T, K]) Subtree(key K) (*Tree[T, K], error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	tree, err := b.buildTree()
-	if err != nil {
-		return nil, err
-	}
-
-	subtree, ok := tree.Subtree(key)
-	if !ok {
-		return nil, fmt.Errorf("key not found: %v", key)
-	}
-	return subtree, nil
-}
-
 func validateTree[K comparable](
 	keys []K,
 	parentKeys []K,
@@ -732,6 +677,21 @@ func validateTree[K comparable](
 		}
 	}
 
+	if cycleKey, found := detectCycle(keys, parentKeys, hasParents, keyIndex); found {
+		return fmt.Errorf("%w: %v", ErrCycle, cycleKey)
+	}
+
+	return nil
+}
+
+// detectCycle reports whether keys/parentKeys/hasParents/keyIndex describe a
+// cycle. The returned key is the first node that closes the loop.
+func detectCycle[K comparable](
+	keys []K,
+	parentKeys []K,
+	hasParents []bool,
+	keyIndex map[K]int,
+) (K, bool) {
 	type color uint8
 	const (
 		colorWhite color = iota
@@ -747,7 +707,7 @@ func validateTree[K comparable](
 		}
 
 		cur := start
-		visited := []K{}
+		var visited []K
 		for colors[cur] == colorWhite {
 			colors[cur] = colorGray
 			visited = append(visited, cur)
@@ -758,7 +718,7 @@ func validateTree[K comparable](
 			}
 
 			if colors[parentKeys[idx]] == colorGray {
-				return fmt.Errorf("%w: %v", ErrCycle, parentKeys[idx])
+				return parentKeys[idx], true
 			}
 			cur = parentKeys[idx]
 		}
@@ -768,7 +728,8 @@ func validateTree[K comparable](
 		}
 	}
 
-	return nil
+	var zero K
+	return zero, false
 }
 
 func sortForest[T any](roots []*Node[T], sortVals map[*Node[T]]int) {
