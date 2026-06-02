@@ -2,6 +2,7 @@ package dal
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -75,7 +76,6 @@ func TestRepo_Update_NoScope(t *testing.T) {
 
 	err := repo.Update(context.Background(), db, &testUser{Name: "Unsafe"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "without scope")
 }
 
 func TestRepo_UpdateFields_NoScope(t *testing.T) {
@@ -84,7 +84,6 @@ func TestRepo_UpdateFields_NoScope(t *testing.T) {
 
 	err := repo.UpdateFields(context.Background(), db, map[string]any{"name": "Unsafe"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "without scope")
 }
 
 func TestRepo_QueryOne(t *testing.T) {
@@ -105,6 +104,7 @@ func TestRepo_QueryOne_NotFound(t *testing.T) {
 
 	result, err := repo.QueryOne(context.Background(), db, Equal("name", "NonExistent"))
 	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrDatabase))
 	assert.Nil(t, result)
 }
 

@@ -50,13 +50,11 @@ func EndOfYear(t time.Time) time.Time {
 	return EndOfDay(time.Date(t.Year(), 12, 31, 0, 0, 0, 0, t.Location()))
 }
 
-// IsWeekend reports whether t falls on Saturday or Sunday.
 func IsWeekend(t time.Time) bool {
 	weekday := t.Weekday()
 	return weekday == time.Saturday || weekday == time.Sunday
 }
 
-// IsWeekday reports whether t falls on Monday through Friday.
 func IsWeekday(t time.Time) bool {
 	return !IsWeekend(t)
 }

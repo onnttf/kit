@@ -1,6 +1,12 @@
 package container
 
-import "slices"
+import (
+	"errors"
+	"slices"
+)
+
+// ErrNilCallback is returned when a required callback argument is nil.
+var ErrNilCallback = errors.New("container: callback is nil")
 
 // Difference returns the elements in s1 that are not present in s2.
 // The order from s1 is preserved.
@@ -113,9 +119,13 @@ func Deduplicate[T comparable](input []T) []T {
 
 // ToMap returns a map keyed by keySelector. Later items overwrite earlier ones
 // when the selector returns duplicate keys.
-func ToMap[T any, K comparable](input []T, keySelector func(T) K) map[K]T {
+func ToMap[T any, K comparable](input []T, keySelector func(T) K) (map[K]T, error) {
+	if keySelector == nil {
+		return nil, ErrNilCallback
+	}
+
 	if len(input) == 0 {
-		return make(map[K]T)
+		return make(map[K]T), nil
 	}
 
 	result := make(map[K]T, len(input))
@@ -124,43 +134,56 @@ func ToMap[T any, K comparable](input []T, keySelector func(T) K) map[K]T {
 		result[key] = item
 	}
 
-	return result
+	return result, nil
 }
 
-// FlatMap applies mapper to each input element and concatenates the returned slices.
-func FlatMap[T any, R any](input []T, mapper func(T) []R) []R {
+func FlatMap[T any, R any](input []T, mapper func(T) []R) ([]R, error) {
+	if mapper == nil {
+		return nil, ErrNilCallback
+	}
+
 	if input == nil {
-		return nil
+		return nil, nil
 	}
 	result := make([]R, 0, len(input)*2)
 	for _, item := range input {
 		result = append(result, mapper(item)...)
 	}
-	return result
+	return result, nil
 }
 
-// Reduce folds input into a single value, starting with initial.
-func Reduce[T any, R any](input []T, initial R, reducer func(R, T) R) R {
+func Reduce[T any, R any](input []T, initial R, reducer func(R, T) R) (R, error) {
+	if reducer == nil {
+		return initial, ErrNilCallback
+	}
+
 	result := initial
 	for _, item := range input {
 		result = reducer(result, item)
 	}
-	return result
+	return result, nil
 }
 
-// First returns the first item matching predicate.
-func First[T any](input []T, predicate func(T) bool) (T, bool) {
+func First[T any](input []T, predicate func(T) bool) (T, bool, error) {
+	if predicate == nil {
+		var zero T
+		return zero, false, ErrNilCallback
+	}
+
 	for _, item := range input {
 		if predicate(item) {
-			return item, true
+			return item, true, nil
 		}
 	}
 	var zero T
-	return zero, false
+	return zero, false, nil
 }
 
-// Partition splits input into matching and non-matching elements.
-func Partition[T any](input []T, predicate func(T) bool) (matches []T, nonMatches []T) {
+func Partition[T any](input []T, predicate func(T) bool) (matches []T, nonMatches []T, err error) {
+	if predicate == nil {
+		return nil, nil, ErrNilCallback
+	}
+
 	matches = make([]T, 0)
 	nonMatches = make([]T, 0)
 	for _, item := range input {
@@ -170,15 +193,18 @@ func Partition[T any](input []T, predicate func(T) bool) (matches []T, nonMatche
 			nonMatches = append(nonMatches, item)
 		}
 	}
-	return
+	return matches, nonMatches, nil
 }
 
-// GroupBy groups input elements by the key returned from keyFunc.
-func GroupBy[T any, K comparable](input []T, keyFunc func(T) K) map[K][]T {
+func GroupBy[T any, K comparable](input []T, keyFunc func(T) K) (map[K][]T, error) {
+	if keyFunc == nil {
+		return nil, ErrNilCallback
+	}
+
 	result := make(map[K][]T, len(input))
 	for _, item := range input {
 		key := keyFunc(item)
 		result[key] = append(result[key], item)
 	}
-	return result
+	return result, nil
 }
