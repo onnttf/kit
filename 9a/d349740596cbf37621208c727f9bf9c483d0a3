@@ -1,0 +1,48 @@
+container/slice_test.go
+  s_939c06ab265ea4::t_590acd61ad0e30 169-170
+  s_939c06ab265ea4::t_bcda5b3ed25e0a 7,84-85,96,98,103-104,109-110,115-116,122-123,129-130,138-139,145-146,151-168
+excel/excel_test.go
+  s_939c06ab265ea4::t_0c1138c0b619f8 74,79,89,98,109,112,115
+  s_939c06ab265ea4::t_590acd61ad0e30 238-247
+dingtalk/message.go
+  s_939c06ab265ea4::t_eaf6add903cd0f 9-11,13,18
+dal/database_test.go
+  s_939c06ab265ea4::t_98785becad11cb 5,107
+dal/database.go
+  s_939c06ab265ea4::t_bdda00feeed8b7 56,153,166
+  s_939c06ab265ea4::t_31def030ec9ec0 47,50,59,62,66,79,82,85,99,102,105,113,125,134,144,147,156,159,169,172
+dingtalk/robot.go
+  s_939c06ab265ea4::t_a3dea0162e7a0b 87-88,94-95,97,142
+  s_939c06ab265ea4::t_9c688c70606eab 69,72,75,83
+  s_939c06ab265ea4::t_6b030e92b8a4f4 63
+  s_939c06ab265ea4::t_8411546f6f878c 115-118,129
+  s_939c06ab265ea4::t_98785becad11cb 19-24,65-67,132
+  s_939c06ab265ea4::t_8e4d95c5a5156f 25
+container/slice.go
+  s_939c06ab265ea4::t_87921b98a5ed75 3-9,122,124,128,137,140,142,146,152,155,157,164,167,169-170,175,179,182,184,196,199,201,209
+  s_939c06ab265ea4::t_a3dea0162e7a0b 123,125-126,141,143-144,156,158-159,168,171-172,183,185-186,200,202-203
+excel/excel.go
+  s_939c06ab265ea4::t_bdda00feeed8b7 162
+  s_939c06ab265ea4::t_13bd783ebe5588 22-27
+  s_939c06ab265ea4::t_fa020550ff5eb3 18,28,286,296,333,346,352,417,427,437,449
+  s_939c06ab265ea4::t_8e4d95c5a5156f 19-21
+  s_939c06ab265ea4::t_a3dea0162e7a0b 60-61,63-66,80,82-85,105-107,213-214,216-219
+dingtalk/robot_test.go
+  s_939c06ab265ea4::t_98785becad11cb 106,118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "9ad349740596cbf37621208c727f9bf9c483d0a3",
+  "prompts": {},
+  "sessions": {
+    "s_939c06ab265ea4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e8606-f0cc-7e31-b69b-fbfcf5a71854",
+        "model": "gpt-5.5"
+      },
+      "human_author": "ZHANG PENG <onnttf@gmail.com>"
+    }
+  }
+}
