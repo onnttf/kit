@@ -2,7 +2,6 @@ package tree
 
 import "slices"
 
-// Stats summarizes basic tree shape metrics.
 type Stats struct {
 	TotalNodes  int
 	RootNodes   int
@@ -12,7 +11,7 @@ type Stats struct {
 	AvgChildren float64
 }
 
-// Tree is an immutable tree built by Builder.
+// Tree is a built tree indexed by key.
 type Tree[T any, K comparable] struct {
 	roots     []*Node[T]
 	cache     map[K]*Node[T]
@@ -20,13 +19,10 @@ type Tree[T any, K comparable] struct {
 	keyFn     func(T) K
 }
 
-// Len returns the number of nodes in the tree.
 func (t *Tree[T, K]) Len() int { return len(t.cache) }
 
-// Empty reports whether the tree has no nodes.
 func (t *Tree[T, K]) Empty() bool { return len(t.cache) == 0 }
 
-// ContainsKey reports whether key exists in the tree.
 func (t *Tree[T, K]) ContainsKey(key K) bool {
 	_, ok := t.cache[key]
 	return ok
@@ -50,7 +46,6 @@ func (t *Tree[T, K]) Roots() []*Node[T] {
 	return out
 }
 
-// ParentOf returns the parent key for key.
 func (t *Tree[T, K]) ParentOf(key K) (K, bool) {
 	if _, ok := t.cache[key]; !ok {
 		var zero K
@@ -185,7 +180,6 @@ func (t *Tree[T, K]) Walk(fn func(*Node[T], *Node[T]) bool) bool {
 	return true
 }
 
-// Filter returns a tree containing nodes that match fn.
 func (t *Tree[T, K]) Filter(fn func(*Node[T]) bool) *Tree[T, K] {
 	var filteredRoots []*Node[T]
 	filteredCache := make(map[K]*Node[T])
@@ -225,7 +219,6 @@ func (t *Tree[T, K]) Filter(fn func(*Node[T]) bool) *Tree[T, K] {
 	}
 }
 
-// Map returns a tree with each item transformed by fn and re-keyed by keyFn.
 func (t *Tree[T, K]) Map(fn func(T) T, keyFn func(T) K) *Tree[T, K] {
 	newRoots := make([]*Node[T], len(t.roots))
 
@@ -280,7 +273,7 @@ func (t *Tree[T, K]) Clone() *Tree[T, K] {
 	}
 
 	var zero K
-	for _, r := range t.roots {
+	for _, r := range roots {
 		collect(r, zero, false)
 	}
 
@@ -292,7 +285,7 @@ func (t *Tree[T, K]) Clone() *Tree[T, K] {
 	}
 }
 
-// Subtree returns a tree rooted at key.
+// Subtree returns a tree rooted at a copy of key's node.
 func (t *Tree[T, K]) Subtree(key K) (*Tree[T, K], bool) {
 	if _, ok := t.cache[key]; !ok {
 		return nil, false
@@ -320,7 +313,6 @@ func (t *Tree[T, K]) Subtree(key K) (*Tree[T, K], bool) {
 	return subtree, true
 }
 
-// ToMap returns all tree items keyed by their tree key.
 func (t *Tree[T, K]) ToMap() map[K]T {
 	result := make(map[K]T, len(t.cache))
 	for k, n := range t.cache {
@@ -329,7 +321,6 @@ func (t *Tree[T, K]) ToMap() map[K]T {
 	return result
 }
 
-// Stats returns tree shape metrics.
 func (t *Tree[T, K]) Stats() Stats {
 	if len(t.cache) == 0 {
 		return Stats{}
