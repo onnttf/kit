@@ -37,7 +37,6 @@ type Config[T any] struct {
 	OnEnd func(ctx context.Context, result *Result)
 }
 
-// Validate checks whether c can be used to create an Executor.
 func (c *Config[T]) Validate() error {
 	if c.Concurrency <= 0 {
 		return fmt.Errorf("concurrency must be > 0, got %d", c.Concurrency)
@@ -51,7 +50,6 @@ func (c *Config[T]) Validate() error {
 	return nil
 }
 
-// SetDefaults fills unset optional fields with executor defaults.
 func (c *Config[T]) SetDefaults() {
 	if c.Name == "" {
 		c.Name = "executor"

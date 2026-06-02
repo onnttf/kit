@@ -1,10 +1,12 @@
 package concurrent
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResult_Duration(t *testing.T) {
@@ -67,4 +69,17 @@ func TestResult_IsComplete(t *testing.T) {
 			assert.Equal(t, tt.expected, tt.result.IsComplete())
 		})
 	}
+}
+
+func TestExecutor_Run_EmptyItemsInitializesErrorCount(t *testing.T) {
+	exec, err := New(Config[int]{Concurrency: 1})
+	require.NoError(t, err)
+
+	result, err := exec.Run(context.Background(), nil, func(context.Context, int) error {
+		return nil
+	})
+
+	require.NoError(t, err)
+	assert.NotNil(t, result.ErrorCount)
+	assert.Empty(t, result.ErrorCount)
 }

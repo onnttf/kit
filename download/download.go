@@ -46,10 +46,8 @@ type config struct {
 	overwrite bool
 }
 
-// Option configures a download request.
 type Option func(*config)
 
-// WithClient uses client instead of the package default HTTP client.
 func WithClient(client *http.Client) Option {
 	return func(c *config) {
 		if client != nil {
@@ -58,7 +56,6 @@ func WithClient(client *http.Client) Option {
 	}
 }
 
-// WithMaxBytes sets the maximum response body size.
 func WithMaxBytes(n int64) Option {
 	return func(c *config) {
 		if n > 0 {
@@ -67,14 +64,12 @@ func WithMaxBytes(n int64) Option {
 	}
 }
 
-// WithOverwrite allows GetFile to replace an existing destination file.
 func WithOverwrite() Option {
 	return func(c *config) {
 		c.overwrite = true
 	}
 }
 
-// WithTimeout sets the timeout on the request HTTP client copy.
 func WithTimeout(d time.Duration) Option {
 	return func(c *config) {
 		client := *c.client
@@ -121,7 +116,7 @@ func GetFile(ctx context.Context, rawURL, name string, opts ...Option) (err erro
 	}()
 
 	if err := checkResponse(resp, cfg.maxBytes); err != nil {
-		if _, copyErr := io.Copy(io.Discard, resp.Body); copyErr != nil {
+		if _, copyErr := discardLimited(resp.Body, cfg.maxBytes); copyErr != nil {
 			return fmt.Errorf("discard response body: %w", copyErr)
 		}
 		return err
@@ -179,7 +174,6 @@ func GetFile(ctx context.Context, rawURL, name string, opts ...Option) (err erro
 	return nil
 }
 
-// GetBytes downloads rawURL and returns the response body.
 // A nil context is treated as context.Background.
 func GetBytes(ctx context.Context, rawURL string, opts ...Option) (data []byte, err error) {
 	if ctx == nil {
@@ -211,7 +205,7 @@ func GetBytes(ctx context.Context, rawURL string, opts ...Option) (data []byte, 
 	}()
 
 	if err := checkResponse(resp, cfg.maxBytes); err != nil {
-		if _, copyErr := io.Copy(io.Discard, resp.Body); copyErr != nil {
+		if _, copyErr := discardLimited(resp.Body, cfg.maxBytes); copyErr != nil {
 			return nil, fmt.Errorf("discard response body: %w", copyErr)
 		}
 		return nil, err
@@ -294,4 +288,8 @@ func copyLimited(dst io.Writer, src io.Reader, maxBytes int64) error {
 		return ErrResponseBodyTooLarge
 	}
 	return nil
+}
+
+func discardLimited(r io.Reader, maxBytes int64) (int64, error) {
+	return io.Copy(io.Discard, io.LimitReader(r, maxBytes))
 }
