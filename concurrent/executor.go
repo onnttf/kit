@@ -28,6 +28,10 @@ type errorCounter struct {
 }
 
 // Executor runs items once with bounded concurrency and configured failure policies.
+//
+// An Executor is single-use: Run or RunStream may be called exactly once per
+// Executor. A second call returns ErrExecutorReused. To run again, construct a
+// new Executor.
 type Executor[T any] struct {
 	config Config[T]
 
@@ -79,7 +83,7 @@ func (e *Executor[T]) Run(ctx context.Context, items []T, handler Handler[T]) (*
 	}
 
 	if len(items) == 0 {
-		result.EndTime = time.Now()
+		e.populateResult(ctx, result)
 		return result, nil
 	}
 

@@ -35,6 +35,11 @@ func TestExponentialBackoff_WithMax(t *testing.T) {
 	assert.Equal(t, 10*time.Millisecond, backoff(5))
 }
 
+func TestExponentialBackoff_OverflowUsesMax(t *testing.T) {
+	backoff := ExponentialBackoff(time.Hour, time.Second)
+	assert.Equal(t, time.Second, backoff(62))
+}
+
 func TestExponentialBackoff_ZeroOrNegativeAttempt(t *testing.T) {
 	backoff := ExponentialBackoff(time.Millisecond, 0)
 	assert.Equal(t, time.Duration(0), backoff(0))
@@ -57,10 +62,15 @@ func TestFibonacciBackoff_WithMax(t *testing.T) {
 	assert.Equal(t, 5*time.Millisecond, backoff(100))
 }
 
+func TestFibonacciBackoff_OverflowUsesMax(t *testing.T) {
+	backoff := FibonacciBackoff(time.Hour, time.Second)
+	assert.Equal(t, time.Second, backoff(92))
+}
+
 func TestFibonacci(t *testing.T) {
 	tests := []struct {
 		n      int
-		expect int
+		expect int64
 	}{
 		{0, 0},
 		{1, 1},

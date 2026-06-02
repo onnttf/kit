@@ -3,6 +3,7 @@ package download
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -207,6 +208,28 @@ func TestGetBytes_BodyTooLarge(t *testing.T) {
 	assert.ErrorIs(t, err, ErrResponseBodyTooLarge)
 }
 
+func TestGetBytes_Non200DiscardsLimitedBody(t *testing.T) {
+	body := &countingBody{}
+	client := &http.Client{
+		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusInternalServerError,
+				Body:       body,
+			}, nil
+		}),
+	}
+
+	_, err := GetBytes(
+		context.Background(),
+		"https://example.com/error",
+		WithClient(client),
+		WithMaxBytes(3),
+	)
+
+	assert.ErrorIs(t, err, ErrUnexpectedStatus)
+	assert.LessOrEqual(t, body.read, 3)
+}
+
 func TestValidateURL(t *testing.T) {
 	tests := []struct {
 		url      string
@@ -240,6 +263,31 @@ func TestReadLimited(t *testing.T) {
 	_, err = readLimited(strings.NewReader("abcd"), 3)
 	assert.ErrorIs(t, err, ErrResponseBodyTooLarge)
 }
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+type countingBody struct {
+	read int
+}
+
+func (b *countingBody) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	p[0] = 'x'
+	b.read++
+	return 1, nil
+}
+
+func (b *countingBody) Close() error {
+	return nil
+}
+
+var _ io.ReadCloser = (*countingBody)(nil)
 
 func TestCopyLimited(t *testing.T) {
 	var dst strings.Builder

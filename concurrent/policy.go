@@ -6,28 +6,24 @@ import (
 	"sync"
 )
 
-// PanicAsAbort returns a panic policy that aborts the executor.
 func PanicAsAbort[T any]() PanicPolicy[T] {
 	return func(_ any, _ T, _ int) ErrorAction {
 		return ActionAbort
 	}
 }
 
-// PanicAsContinue returns a panic policy that records the panic as an item error.
 func PanicAsContinue[T any]() PanicPolicy[T] {
 	return func(_ any, _ T, _ int) ErrorAction {
 		return ActionContinue
 	}
 }
 
-// AlwaysContinue returns an error policy that records errors and continues.
 func AlwaysContinue[T any]() ErrorPolicy[T] {
 	return func(_ error, _ T, _ int) ErrorAction {
 		return ActionContinue
 	}
 }
 
-// AlwaysRetry returns an error policy that retries every error.
 func AlwaysRetry[T any]() ErrorPolicy[T] {
 	return func(_ error, _ T, _ int) ErrorAction {
 		return ActionRetry
@@ -44,7 +40,6 @@ func RetryOnTimeout[T any]() ErrorPolicy[T] {
 	}
 }
 
-// AbortOnError aborts the executor on every handler error.
 func AbortOnError[T any]() ErrorPolicy[T] {
 	return func(_ error, _ T, _ int) ErrorAction {
 		return ActionAbort
@@ -66,7 +61,6 @@ func AbortOnFirstError[T any]() ErrorPolicy[T] {
 	}
 }
 
-// RetryOnCondition retries when shouldRetry returns true.
 func RetryOnCondition[T any](shouldRetry func(error) bool) ErrorPolicy[T] {
 	return func(err error, _ T, _ int) ErrorAction {
 		if shouldRetry(err) {
@@ -76,7 +70,6 @@ func RetryOnCondition[T any](shouldRetry func(error) bool) ErrorPolicy[T] {
 	}
 }
 
-// AbortOnCondition aborts when shouldAbort returns true.
 func AbortOnCondition[T any](shouldAbort func(error) bool) ErrorPolicy[T] {
 	return func(err error, _ T, _ int) ErrorAction {
 		if shouldAbort(err) {

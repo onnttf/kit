@@ -77,22 +77,25 @@ func TestAbortOnFirstError_Concurrent(t *testing.T) {
 }
 
 func TestRetryOnCondition(t *testing.T) {
+	errTemporary := errors.New("temporary")
+	errPermanent := errors.New("permanent")
 	isTemporary := func(err error) bool {
-		return err != nil && err.Error() == "temporary"
+		return errors.Is(err, errTemporary)
 	}
 	policy := RetryOnCondition[int](isTemporary)
-	action := policy(errors.New("temporary"), 123, 0)
+	action := policy(errTemporary, 123, 0)
 	assert.Equal(t, ActionRetry, action)
-	action = policy(errors.New("permanent"), 123, 0)
+	action = policy(errPermanent, 123, 0)
 	assert.Equal(t, ActionContinue, action)
 }
 
 func TestAbortOnCondition(t *testing.T) {
+	errCritical := errors.New("critical")
 	isCritical := func(err error) bool {
-		return err != nil && err.Error() == "critical"
+		return errors.Is(err, errCritical)
 	}
 	policy := AbortOnCondition[int](isCritical)
-	action := policy(errors.New("critical"), 123, 0)
+	action := policy(errCritical, 123, 0)
 	assert.Equal(t, ActionAbort, action)
 }
 

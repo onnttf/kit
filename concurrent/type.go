@@ -9,7 +9,6 @@ import (
 // blocking work.
 type Handler[T any] func(ctx context.Context, item T) error
 
-// ErrorAction controls what the executor does after a handler error.
 type ErrorAction int
 
 const (
@@ -23,7 +22,6 @@ const (
 	ActionAbort
 )
 
-// String returns a stable label for a retry action.
 func (a ErrorAction) String() string {
 	switch a {
 	case ActionContinue:
@@ -37,13 +35,10 @@ func (a ErrorAction) String() string {
 	}
 }
 
-// ErrorPolicy maps a handler error to the next executor action.
 type ErrorPolicy[T any] func(err error, item T, attempt int) ErrorAction
 
-// PanicPolicy maps a recovered panic to the next executor action.
 type PanicPolicy[T any] func(panicValue any, item T, attempt int) ErrorAction
 
-// BackoffFunc returns the delay before a retry attempt.
 type BackoffFunc func(attempt int) time.Duration
 
 type workItem[T any] struct {
