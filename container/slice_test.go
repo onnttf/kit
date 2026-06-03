@@ -78,6 +78,36 @@ func TestDeduplicate(t *testing.T) {
 	}
 }
 
+func TestValidValues(t *testing.T) {
+	t.Run("nil input stays nil", func(t *testing.T) {
+		assert.Nil(t, ValidValues[int](nil))
+	})
+
+	t.Run("filters zero values", func(t *testing.T) {
+		assert.Equal(t, []int{1, 2, 3}, ValidValues([]int{0, 1, 2, 0, 3}))
+	})
+
+	t.Run("applies keep predicate", func(t *testing.T) {
+		assert.Equal(t, []int{2, 4}, ValidValues([]int{0, 1, 2, 3, 4}, func(v int) bool { return v%2 == 0 }))
+	})
+
+	t.Run("ignores nil predicate", func(t *testing.T) {
+		assert.Equal(t, []string{"a", "b"}, ValidValues([]string{"", "a", "", "b"}, nil))
+	})
+
+	t.Run("applies all predicates", func(t *testing.T) {
+		assert.Equal(
+			t,
+			[]int{4},
+			ValidValues(
+				[]int{0, 1, 2, 3, 4, 5, 6},
+				func(v int) bool { return v%2 == 0 },
+				func(v int) bool { return v > 2 && v < 5 },
+			),
+		)
+	})
+}
+
 func TestToMap(t *testing.T) {
 	type Person struct{ Name string }
 	input := []Person{{Name: "Alice"}, {Name: "Bob"}}

@@ -94,27 +94,56 @@ func Union[T comparable](s1, s2 []T) []T {
 	return result
 }
 
-// Deduplicate returns the unique elements from input in first-seen order.
-func Deduplicate[T comparable](input []T) []T {
-	if input == nil {
+// ValidValues returns a new slice without zero values; values are kept only if they pass all non-nil keep predicates.
+func ValidValues[T comparable](values []T, keep ...func(T) bool) []T {
+	if values == nil {
 		return nil
 	}
 
-	if len(input) == 0 {
+	var zero T
+	out := make([]T, 0, len(values))
+	for _, value := range values {
+		if value == zero {
+			continue
+		}
+
+		valid := true
+		for _, predicate := range keep {
+			if predicate != nil && !predicate(value) {
+				valid = false
+				break
+			}
+		}
+		if !valid {
+			continue
+		}
+
+		out = append(out, value)
+	}
+
+	return out
+}
+
+// Deduplicate returns a new slice with duplicate values removed in original order.
+func Deduplicate[T comparable](values []T) []T {
+	if values == nil {
+		return nil
+	}
+
+	if len(values) == 0 {
 		return []T{}
 	}
 
-	seen := make(map[T]struct{}, len(input))
-	result := make([]T, 0, len(input))
-
-	for _, item := range input {
-		if _, exists := seen[item]; !exists {
-			seen[item] = struct{}{}
-			result = append(result, item)
+	out := make([]T, 0, len(values))
+	seen := make(map[T]struct{}, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
 		}
+		seen[value] = struct{}{}
+		out = append(out, value)
 	}
-
-	return result
+	return out
 }
 
 // ToMap returns a map keyed by keySelector. Later items overwrite earlier ones
