@@ -1,0 +1,26 @@
+container/slice_test.go
+  s_effa428fc6b8e3::t_caeee09b39b49f 81,86-96,109-110
+  s_effa428fc6b8e3::t_4640d7a3d96d67 82-85
+  s_effa428fc6b8e3::t_a0d9c9c9165613 97-108
+container/slice.go
+  s_effa428fc6b8e3::t_a1c3ec6cdc5c57 106-117,120
+  s_effa428fc6b8e3::t_9c14c47f03df76 98,103-105,118-119,121,124-125,127-130,133-146
+  s_effa428fc6b8e3::t_2c8824db2315ae 99
+  s_effa428fc6b8e3::t_cade9485377f81 97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5b441f35b11264f18360ced7c3e2fabed1415b16",
+  "prompts": {},
+  "sessions": {
+    "s_effa428fc6b8e3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "21c0893f-74be-46ed-9b9b-2c535ba2aa61",
+        "model": "zyb-gpt"
+      },
+      "human_author": "ZHANG PENG <onnttf@gmail.com>"
+    }
+  }
+}
