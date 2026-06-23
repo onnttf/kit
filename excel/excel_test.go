@@ -247,7 +247,7 @@ func TestScanRow_NilCallback(t *testing.T) {
 
 func BenchmarkParse(b *testing.B) {
 	row := []string{"Alice", "25"}
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = Parse[Person](row)
 	}
 }

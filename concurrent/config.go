@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// Config controls executor concurrency, retries, error handling, and callbacks.
 type Config[T any] struct {
 	Name string
 
@@ -14,7 +13,7 @@ type Config[T any] struct {
 
 	Timeout time.Duration
 
-	MaxRetry int
+	MaxRetries int
 
 	Backoff BackoffFunc
 
@@ -24,7 +23,7 @@ type Config[T any] struct {
 
 	MaxErrorSamples int
 
-	ErrorAggregation bool
+	AggregateErrors bool
 
 	OnBegin func(ctx context.Context, total int)
 
@@ -41,8 +40,8 @@ func (c *Config[T]) Validate() error {
 	if c.Concurrency <= 0 {
 		return fmt.Errorf("concurrency must be > 0, got %d", c.Concurrency)
 	}
-	if c.MaxRetry < 0 {
-		return fmt.Errorf("max retry must be >= 0, got %d", c.MaxRetry)
+	if c.MaxRetries < 0 {
+		return fmt.Errorf("max retries must be >= 0, got %d", c.MaxRetries)
 	}
 	if c.Timeout < 0 {
 		return fmt.Errorf("timeout must be >= 0, got %v", c.Timeout)

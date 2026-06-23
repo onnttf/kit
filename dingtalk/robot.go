@@ -17,10 +17,9 @@ import (
 )
 
 var (
-	// ErrUnexpectedStatus indicates that DingTalk returned a non-200 HTTP status.
-	ErrUnexpectedStatus = errors.New("unexpected http status")
-	// ErrUnexpectedResponse indicates that DingTalk returned a non-zero error code.
-	ErrUnexpectedResponse = errors.New("unexpected response")
+	ErrUnexpectedStatus = errors.New("dingtalk: unexpected http status")
+
+	ErrUnexpectedResponse = errors.New("dingtalk: unexpected response")
 )
 
 var getDefaultClient = sync.OnceValue(func() *http.Client {
@@ -30,14 +29,13 @@ var getDefaultClient = sync.OnceValue(func() *http.Client {
 	}
 })
 
-// Robot sends messages to a DingTalk robot webhook.
 type Robot struct {
 	accessToken string
 	secret      string
 	httpClient  *http.Client
 }
 
-func NewRobot(accessToken string) *Robot {
+func New(accessToken string) *Robot {
 	return &Robot{accessToken: accessToken, httpClient: getDefaultClient()}
 }
 
@@ -53,14 +51,12 @@ func (r *Robot) WithClient(client *http.Client) *Robot {
 	return r
 }
 
-// Send posts msg using a background context with the default timeout.
 func (r *Robot) Send(msg Message) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return r.SendWithContext(ctx, msg)
 }
 
-// A nil context is treated as context.Background.
 func (r *Robot) SendWithContext(ctx context.Context, msg Message) (err error) {
 	if ctx == nil {
 		ctx = context.Background()

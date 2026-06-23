@@ -13,8 +13,10 @@ const (
 	workChannelBufferMultiplier = 2
 )
 
-// ErrExecutorReused is returned when Run or RunStream is called more than once.
-var ErrExecutorReused = errors.New("executor already used")
+var (
+	ErrExecutorReused = errors.New("concurrent: executor already used")
+	ErrNilHandler     = errors.New("concurrent: handler is nil")
+)
 
 type execCounters struct {
 	success   atomic.Int64
@@ -27,11 +29,6 @@ type errorCounter struct {
 	count atomic.Int64
 }
 
-// Executor runs items once with bounded concurrency and configured failure policies.
-//
-// An Executor is single-use: Run or RunStream may be called exactly once per
-// Executor. A second call returns ErrExecutorReused. To run again, construct a
-// new Executor.
 type Executor[T any] struct {
 	config Config[T]
 
@@ -47,7 +44,6 @@ type Executor[T any] struct {
 	used atomic.Bool
 }
 
-// New validates config, applies defaults, and returns a single-use executor.
 func New[T any](config Config[T]) (*Executor[T], error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
@@ -58,9 +54,10 @@ func New[T any](config Config[T]) (*Executor[T], error) {
 	return &Executor[T]{config: config}, nil
 }
 
-// Run processes items with bounded concurrency and returns a summary.
-// A nil context is treated as context.Background.
 func (e *Executor[T]) Run(ctx context.Context, items []T, handler Handler[T]) (*Result, error) {
+	if handler == nil {
+		return nil, ErrNilHandler
+	}
 	if !e.used.CompareAndSwap(false, true) {
 		return nil, ErrExecutorReused
 	}
@@ -90,9 +87,7 @@ func (e *Executor[T]) Run(ctx context.Context, items []T, handler Handler[T]) (*
 	workCh := make(chan workItem[T], e.config.Concurrency*workChannelBufferMultiplier)
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		defer close(workCh)
 		for i, item := range items {
 			select {
@@ -101,11 +96,12 @@ func (e *Executor[T]) Run(ctx context.Context, items []T, handler Handler[T]) (*
 			case workCh <- workItem[T]{id: i, data: item}:
 			}
 		}
-	}()
+	})
 
-	for i := 0; i < e.config.Concurrency; i++ {
-		wg.Add(1)
-		go e.worker(ctx, workCh, handler, cancel, &wg)
+	for range e.config.Concurrency {
+		wg.Go(func() {
+			e.worker(ctx, workCh, handler, cancel)
+		})
 	}
 
 	wg.Wait()
@@ -114,13 +110,14 @@ func (e *Executor[T]) Run(ctx context.Context, items []T, handler Handler[T]) (*
 	return result, nil
 }
 
-// RunStream processes items from in until the channel is closed or ctx is canceled.
-// The result total counts items successfully queued for workers.
 func (e *Executor[T]) RunStream(
 	ctx context.Context,
 	in <-chan T,
 	handler Handler[T],
 ) (*Result, error) {
+	if handler == nil {
+		return nil, ErrNilHandler
+	}
 	if !e.used.CompareAndSwap(false, true) {
 		return nil, ErrExecutorReused
 	}
@@ -145,9 +142,7 @@ func (e *Executor[T]) RunStream(
 	var wg sync.WaitGroup
 	var count atomic.Int64
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		defer close(workCh)
 
 		id := 0
@@ -168,11 +163,12 @@ func (e *Executor[T]) RunStream(
 				}
 			}
 		}
-	}()
+	})
 
-	for i := 0; i < e.config.Concurrency; i++ {
-		wg.Add(1)
-		go e.worker(ctx, workCh, handler, cancel, &wg)
+	for range e.config.Concurrency {
+		wg.Go(func() {
+			e.worker(ctx, workCh, handler, cancel)
+		})
 	}
 
 	wg.Wait()
@@ -194,11 +190,10 @@ func (e *Executor[T]) populateResult(ctx context.Context, result *Result) {
 		result.AbortReason = info
 	}
 
-	result.ErrorSamples = e.samples
-	if result.ErrorCount == nil {
-		result.ErrorCount = make(map[string]int)
-	}
-
+	e.sampleMu.Lock()
+	result.ErrorSamples = append([]ErrorSample(nil), e.samples...)
+	e.sampleMu.Unlock()
+	errorCounts := make(map[string]int)
 	e.errorCounts.Range(func(key, value any) bool {
 		strKey, ok := key.(string)
 		if !ok {
@@ -208,9 +203,10 @@ func (e *Executor[T]) populateResult(ctx context.Context, result *Result) {
 		if !ok {
 			return true
 		}
-		result.ErrorCount[strKey] = int(counter.count.Load())
+		errorCounts[strKey] = int(counter.count.Load())
 		return true
 	})
+	result.ErrorCount = errorCounts
 
 	result.EndTime = time.Now()
 
@@ -224,10 +220,7 @@ func (e *Executor[T]) worker(
 	workCh <-chan workItem[T],
 	handler Handler[T],
 	cancel context.CancelFunc,
-	wg *sync.WaitGroup,
 ) {
-	defer wg.Done()
-
 	for item := range workCh {
 		e.runWithRetry(ctx, item, handler, cancel)
 	}
@@ -281,7 +274,7 @@ func (e *Executor[T]) runWithRetry(
 
 		switch action {
 		case ActionRetry:
-			if item.attempt >= e.config.MaxRetry {
+			if item.attempt >= e.config.MaxRetries {
 				e.counters.failed.Add(1)
 				return
 			}
@@ -361,7 +354,7 @@ func (e *Executor[T]) abort(item workItem[T], err error) {
 }
 
 func (e *Executor[T]) recordError(item workItem[T], err error) {
-	if e.config.ErrorAggregation {
+	if e.config.AggregateErrors {
 		key := err.Error()
 		v, _ := e.errorCounts.LoadOrStore(key, &errorCounter{})
 		v.(*errorCounter).count.Add(1)

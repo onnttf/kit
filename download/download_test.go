@@ -61,6 +61,19 @@ func TestWithTimeout(t *testing.T) {
 	assert.Equal(t, 30*time.Second, cfg.client.Timeout)
 }
 
+func TestWithTimeout_NonPositive(t *testing.T) {
+	cfg := new(config)
+	client := *getDefaultClient()
+	cfg.client = &client
+	before := cfg.client.Timeout
+
+	WithTimeout(0)(cfg)
+	assert.Equal(t, before, cfg.client.Timeout)
+
+	WithTimeout(-time.Second)(cfg)
+	assert.Equal(t, before, cfg.client.Timeout)
+}
+
 func TestGetFile(t *testing.T) {
 	content := "test file content"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -72,7 +85,7 @@ func TestGetFile(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	destPath := filepath.Join(tmpDir, "test.txt")
-	err := GetFile(context.Background(), server.URL, destPath)
+	err := GetFile(t.Context(), server.URL, destPath)
 	require.NoError(t, err)
 	data, err := os.ReadFile(destPath)
 	require.NoError(t, err)
@@ -82,14 +95,19 @@ func TestGetFile(t *testing.T) {
 func TestGetFile_EmptyURL(t *testing.T) {
 	tmpDir := t.TempDir()
 	destPath := filepath.Join(tmpDir, "test.txt")
-	err := GetFile(context.Background(), "", destPath)
+	err := GetFile(t.Context(), "", destPath)
 	assert.ErrorIs(t, err, ErrEmptyURL)
+}
+
+func TestGetFile_EmptyName(t *testing.T) {
+	err := GetFile(t.Context(), "https://example.com/file.txt", "")
+	assert.ErrorIs(t, err, ErrEmptyName)
 }
 
 func TestGetFile_InvalidURL(t *testing.T) {
 	tmpDir := t.TempDir()
 	destPath := filepath.Join(tmpDir, "test.txt")
-	err := GetFile(context.Background(), "://invalid", destPath)
+	err := GetFile(t.Context(), "://invalid", destPath)
 	assert.Error(t, err)
 }
 
@@ -99,7 +117,7 @@ func TestGetFile_FileExists(t *testing.T) {
 	f, err := os.Create(destPath)
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
-	err = GetFile(context.Background(), "https://example.com/file.txt", destPath)
+	err = GetFile(t.Context(), "https://example.com/file.txt", destPath)
 	assert.ErrorIs(t, err, ErrFileExists)
 }
 
@@ -116,7 +134,7 @@ func TestGetFile_Overwrite(t *testing.T) {
 	destPath := filepath.Join(tmpDir, "test.txt")
 	require.NoError(t, os.WriteFile(destPath, []byte("old content"), 0o644))
 
-	err := GetFile(context.Background(), server.URL, destPath, WithOverwrite())
+	err := GetFile(t.Context(), server.URL, destPath, WithOverwrite())
 	require.NoError(t, err)
 	data, err := os.ReadFile(destPath)
 	require.NoError(t, err)
@@ -140,7 +158,7 @@ func TestGetFile_NoOverwriteRace(t *testing.T) {
 	}))
 	defer server.Close()
 
-	err := GetFile(context.Background(), server.URL, destPath)
+	err := GetFile(t.Context(), server.URL, destPath)
 	require.ErrorIs(t, err, ErrFileExists)
 
 	data, readErr := os.ReadFile(destPath)
@@ -156,7 +174,7 @@ func TestGetFile_Non200(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	destPath := filepath.Join(tmpDir, "test.txt")
-	err := GetFile(context.Background(), server.URL, destPath)
+	err := GetFile(t.Context(), server.URL, destPath)
 	assert.Error(t, err)
 }
 
@@ -185,13 +203,13 @@ func TestGetBytes(t *testing.T) {
 	}))
 	defer server.Close()
 
-	data, err := GetBytes(context.Background(), server.URL)
+	data, err := GetBytes(t.Context(), server.URL)
 	require.NoError(t, err)
 	assert.Equal(t, content, string(data))
 }
 
 func TestGetBytes_EmptyURL(t *testing.T) {
-	_, err := GetBytes(context.Background(), "")
+	_, err := GetBytes(t.Context(), "")
 	assert.ErrorIs(t, err, ErrEmptyURL)
 }
 
@@ -204,7 +222,7 @@ func TestGetBytes_BodyTooLarge(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := GetBytes(context.Background(), server.URL, WithMaxBytes(3))
+	_, err := GetBytes(t.Context(), server.URL, WithMaxBytes(3))
 	assert.ErrorIs(t, err, ErrResponseBodyTooLarge)
 }
 
@@ -220,7 +238,7 @@ func TestGetBytes_Non200DiscardsLimitedBody(t *testing.T) {
 	}
 
 	_, err := GetBytes(
-		context.Background(),
+		t.Context(),
 		"https://example.com/error",
 		WithClient(client),
 		WithMaxBytes(3),
@@ -339,6 +357,12 @@ func TestNewConfig(t *testing.T) {
 	assert.NotNil(t, cfg.client)
 	assert.Equal(t, int64(defaultMaxBytes), cfg.maxBytes)
 	assert.False(t, cfg.overwrite)
+}
+
+func TestNewConfig_IgnoresNilOption(t *testing.T) {
+	cfg := newConfig(nil)
+	assert.NotNil(t, cfg.client)
+	assert.Equal(t, int64(defaultMaxBytes), cfg.maxBytes)
 }
 
 func TestNewConfig_DefaultTransportClonesHTTPDefaultTransport(t *testing.T) {

@@ -8,15 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewTextMsg(t *testing.T) {
-	msg := NewTextMsg("Hello World")
+func TestNewTextMessage(t *testing.T) {
+	msg := NewTextMessage("Hello World")
 
-	assert.Equal(t, MsgTypeText, msg.MsgType)
+	assert.Equal(t, MessageTypeText, msg.Type)
 	assert.Equal(t, "Hello World", msg.Text.Content)
 }
 
-func TestTextMsg_WithAtMobiles(t *testing.T) {
-	msg := NewTextMsg("Hello")
+func TestTextMessage_WithAtMobiles(t *testing.T) {
+	msg := NewTextMessage("Hello")
 	mobiles := []string{"13800138000", "13900139000"}
 	msg.WithAtMobiles(mobiles)
 	mobiles[0] = "changed"
@@ -25,15 +25,15 @@ func TestTextMsg_WithAtMobiles(t *testing.T) {
 	assert.False(t, msg.At.IsAtAll)
 }
 
-func TestTextMsg_WithIsAtAll(t *testing.T) {
-	msg := NewTextMsg("Hello")
+func TestTextMessage_WithIsAtAll(t *testing.T) {
+	msg := NewTextMessage("Hello")
 	msg.WithIsAtAll(true)
 
 	assert.True(t, msg.At.IsAtAll)
 }
 
-func TestTextMsg_Payload(t *testing.T) {
-	msg := NewTextMsg("Hello")
+func TestTextMessage_Payload(t *testing.T) {
+	msg := NewTextMessage("Hello")
 	msg.WithAtMobiles([]string{"13800138000"})
 
 	payload, err := msg.Payload()
@@ -43,20 +43,20 @@ func TestTextMsg_Payload(t *testing.T) {
 	err = json.Unmarshal(payload, &result)
 	require.NoError(t, err)
 
-	assert.Equal(t, MsgTypeText, result["msgtype"])
+	assert.Equal(t, MessageTypeText, result["msgtype"])
 	assert.Equal(t, "Hello", result["text"].(map[string]any)["content"])
 }
 
-func TestNewMarkdownMsg(t *testing.T) {
-	msg := NewMarkdownMsg("Title", "## Content")
+func TestNewMarkdownMessage(t *testing.T) {
+	msg := NewMarkdownMessage("Title", "## Content")
 
-	assert.Equal(t, MsgTypeMarkdown, msg.MsgType)
+	assert.Equal(t, MessageTypeMarkdown, msg.Type)
 	assert.Equal(t, "Title", msg.Markdown.Title)
 	assert.Equal(t, "## Content", msg.Markdown.Text)
 }
 
-func TestMarkdownMsg_WithAtMobiles(t *testing.T) {
-	msg := NewMarkdownMsg("Title", "Content")
+func TestMarkdownMessage_WithAtMobiles(t *testing.T) {
+	msg := NewMarkdownMessage("Title", "Content")
 	mobiles := []string{"13800138000"}
 	msg.WithAtMobiles(mobiles)
 	mobiles[0] = "changed"
@@ -64,15 +64,15 @@ func TestMarkdownMsg_WithAtMobiles(t *testing.T) {
 	assert.Equal(t, []string{"13800138000"}, msg.At.AtMobiles)
 }
 
-func TestMarkdownMsg_WithIsAtAll(t *testing.T) {
-	msg := NewMarkdownMsg("Title", "Content")
+func TestMarkdownMessage_WithIsAtAll(t *testing.T) {
+	msg := NewMarkdownMessage("Title", "Content")
 	msg.WithIsAtAll(true)
 
 	assert.True(t, msg.At.IsAtAll)
 }
 
-func TestMarkdownMsg_Payload(t *testing.T) {
-	msg := NewMarkdownMsg("Title", "Content")
+func TestMarkdownMessage_Payload(t *testing.T) {
+	msg := NewMarkdownMessage("Title", "Content")
 
 	payload, err := msg.Payload()
 	require.NoError(t, err)
@@ -81,28 +81,28 @@ func TestMarkdownMsg_Payload(t *testing.T) {
 	err = json.Unmarshal(payload, &result)
 	require.NoError(t, err)
 
-	assert.Equal(t, MsgTypeMarkdown, result["msgtype"])
+	assert.Equal(t, MessageTypeMarkdown, result["msgtype"])
 	assert.Equal(t, "Title", result["markdown"].(map[string]any)["title"])
 }
 
-func TestNewLinkMsg(t *testing.T) {
-	msg := NewLinkMsg("Title", "Description", "https://example.com")
+func TestNewLinkMessage(t *testing.T) {
+	msg := NewLinkMessage("Title", "Description", "https://example.com")
 
-	assert.Equal(t, MsgTypeLink, msg.MsgType)
+	assert.Equal(t, MessageTypeLink, msg.Type)
 	assert.Equal(t, "Title", msg.Link.Title)
 	assert.Equal(t, "Description", msg.Link.Text)
 	assert.Equal(t, "https://example.com", msg.Link.MessageURL)
 }
 
-func TestLinkMsg_WithPicURL(t *testing.T) {
-	msg := NewLinkMsg("Title", "Description", "https://example.com")
+func TestLinkMessage_WithPicURL(t *testing.T) {
+	msg := NewLinkMessage("Title", "Description", "https://example.com")
 	msg.WithPicURL("https://example.com/pic.jpg")
 
 	assert.Equal(t, "https://example.com/pic.jpg", msg.Link.PicURL)
 }
 
-func TestLinkMsg_Payload(t *testing.T) {
-	msg := NewLinkMsg("Title", "Description", "https://example.com")
+func TestLinkMessage_Payload(t *testing.T) {
+	msg := NewLinkMessage("Title", "Description", "https://example.com")
 
 	payload, err := msg.Payload()
 	require.NoError(t, err)
@@ -111,51 +111,51 @@ func TestLinkMsg_Payload(t *testing.T) {
 	err = json.Unmarshal(payload, &result)
 	require.NoError(t, err)
 
-	assert.Equal(t, MsgTypeLink, result["msgtype"])
+	assert.Equal(t, MessageTypeLink, result["msgtype"])
 	assert.Equal(t, "Title", result["link"].(map[string]any)["title"])
 }
 
-func TestNewSingleActionCard(t *testing.T) {
-	msg := NewSingleActionCard("Title", "Text", "Click Me", "https://example.com/click")
+func TestNewSingleActionCardMessage(t *testing.T) {
+	msg := NewSingleActionCardMessage("Title", "Text", "Click Me", "https://example.com/click")
 
-	assert.Equal(t, MsgTypeActionCard, msg.MsgType)
+	assert.Equal(t, MessageTypeActionCard, msg.Type)
 	assert.Equal(t, "Title", msg.ActionCard.Title)
 	assert.Equal(t, "Text", msg.ActionCard.Text)
 	assert.Equal(t, "Click Me", msg.ActionCard.SingleTitle)
 	assert.Equal(t, "https://example.com/click", msg.ActionCard.SingleURL)
 }
 
-func TestNewMultiActionCard(t *testing.T) {
-	btns := []ActionCardBtn{
+func TestNewMultiActionCardMessage(t *testing.T) {
+	btns := []ActionCardButton{
 		{Title: "Button1", ActionURL: "https://example.com/1"},
 		{Title: "Button2", ActionURL: "https://example.com/2"},
 	}
 
-	msg := NewMultiActionCard("Title", "Text", btns)
+	msg := NewMultiActionCardMessage("Title", "Text", btns)
 	btns[0].Title = "Changed"
 
-	assert.Equal(t, MsgTypeActionCard, msg.MsgType)
+	assert.Equal(t, MessageTypeActionCard, msg.Type)
 	assert.Equal(t, "Title", msg.ActionCard.Title)
 	assert.Equal(t, "Text", msg.ActionCard.Text)
 	assert.Len(t, msg.ActionCard.Btns, 2)
 	assert.Equal(t, "Button1", msg.ActionCard.Btns[0].Title)
 }
 
-func TestActionCardMsg_WithBtnOrientation(t *testing.T) {
-	msg := NewSingleActionCard("Title", "Text", "Click", "https://example.com")
+func TestActionCardMessage_WithButtonOrientation(t *testing.T) {
+	msg := NewSingleActionCardMessage("Title", "Text", "Click", "https://example.com")
 
-	msg.WithBtnOrientation(BtnOrientationHorizontal)
-	assert.Equal(t, BtnOrientationHorizontal, msg.ActionCard.BtnOrientation)
+	msg.WithButtonOrientation(OrientationHorizontal)
+	assert.Equal(t, OrientationHorizontal, msg.ActionCard.Orientation)
 
-	msg.WithBtnOrientation(BtnOrientationVertical)
-	assert.Equal(t, BtnOrientationVertical, msg.ActionCard.BtnOrientation)
+	msg.WithButtonOrientation(OrientationVertical)
+	assert.Equal(t, OrientationVertical, msg.ActionCard.Orientation)
 
-	msg.WithBtnOrientation("invalid")
-	assert.Equal(t, BtnOrientationVertical, msg.ActionCard.BtnOrientation)
+	msg.WithButtonOrientation("invalid")
+	assert.Equal(t, OrientationVertical, msg.ActionCard.Orientation)
 }
 
-func TestActionCardMsg_Payload(t *testing.T) {
-	msg := NewSingleActionCard("Title", "Text", "Click", "https://example.com")
+func TestActionCardMessage_Payload(t *testing.T) {
+	msg := NewSingleActionCardMessage("Title", "Text", "Click", "https://example.com")
 
 	payload, err := msg.Payload()
 	require.NoError(t, err)
@@ -164,29 +164,29 @@ func TestActionCardMsg_Payload(t *testing.T) {
 	err = json.Unmarshal(payload, &result)
 	require.NoError(t, err)
 
-	assert.Equal(t, MsgTypeActionCard, result["msgtype"])
+	assert.Equal(t, MessageTypeActionCard, result["msgtype"])
 }
 
-func TestNewFeedCardMsg(t *testing.T) {
+func TestNewFeedCardMessage(t *testing.T) {
 	links := []FeedLink{
 		{Title: "Link1", MessageURL: "https://example.com/1", PicURL: "https://example.com/pic1.jpg"},
 		{Title: "Link2", MessageURL: "https://example.com/2", PicURL: "https://example.com/pic2.jpg"},
 	}
 
-	msg := NewFeedCardMsg(links)
+	msg := NewFeedCardMessage(links)
 	links[0].Title = "Changed"
 
-	assert.Equal(t, MsgTypeFeedCard, msg.MsgType)
+	assert.Equal(t, MessageTypeFeedCard, msg.Type)
 	assert.Len(t, msg.FeedCard.Links, 2)
 	assert.Equal(t, "Link1", msg.FeedCard.Links[0].Title)
 }
 
-func TestFeedCardMsg_Payload(t *testing.T) {
+func TestFeedCardMessage_Payload(t *testing.T) {
 	links := []FeedLink{
 		{Title: "Link1", MessageURL: "https://example.com/1", PicURL: "https://example.com/pic1.jpg"},
 	}
 
-	msg := NewFeedCardMsg(links)
+	msg := NewFeedCardMessage(links)
 
 	payload, err := msg.Payload()
 	require.NoError(t, err)
@@ -195,5 +195,5 @@ func TestFeedCardMsg_Payload(t *testing.T) {
 	err = json.Unmarshal(payload, &result)
 	require.NoError(t, err)
 
-	assert.Equal(t, MsgTypeFeedCard, result["msgtype"])
+	assert.Equal(t, MessageTypeFeedCard, result["msgtype"])
 }

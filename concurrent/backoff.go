@@ -2,21 +2,18 @@ package concurrent
 
 import "time"
 
-// ConstantBackoff returns the same delay for every retry attempt.
 func ConstantBackoff(delay time.Duration) BackoffFunc {
 	return func(_ int) time.Duration {
 		return delay
 	}
 }
 
-// LinearBackoff returns base multiplied by the retry attempt number.
 func LinearBackoff(base time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		return cappedDelay(base, int64(attempt), 0)
 	}
 }
 
-// ExponentialBackoff returns an exponential delay capped by maxDelay when maxDelay is positive.
 func ExponentialBackoff(base time.Duration, maxDelay time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		if attempt <= 0 {
@@ -30,7 +27,6 @@ func ExponentialBackoff(base time.Duration, maxDelay time.Duration) BackoffFunc 
 	}
 }
 
-// FibonacciBackoff returns a Fibonacci delay capped by maxDelay when maxDelay is positive.
 func FibonacciBackoff(base time.Duration, maxDelay time.Duration) BackoffFunc {
 	return func(attempt int) time.Duration {
 		if attempt <= 0 {

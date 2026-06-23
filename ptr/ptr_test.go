@@ -252,41 +252,41 @@ func TestDerefOr_Generics(t *testing.T) {
 }
 
 func BenchmarkTo(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		To(42)
 	}
 }
 
 func BenchmarkDerefOr_NonNil(b *testing.B) {
 	val := 42
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		DerefOr(&val, 0)
 	}
 }
 
 func BenchmarkDerefOr_Nil(b *testing.B) {
 	var val *int
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		DerefOr(val, 0)
 	}
 }
 
 func BenchmarkZero(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		Zero[int]()
 	}
 }
 
 func BenchmarkDeref_NonNil(b *testing.B) {
 	val := 42
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		Deref(&val)
 	}
 }
 
 func BenchmarkDeref_Nil(b *testing.B) {
 	var val *int
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		Deref(val)
 	}
 }

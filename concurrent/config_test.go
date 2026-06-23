@@ -17,7 +17,7 @@ func TestConfig_Validate(t *testing.T) {
 		{"valid config", Config[int]{Concurrency: 1}, false},
 		{"zero concurrency", Config[int]{Concurrency: 0}, true},
 		{"negative concurrency", Config[int]{Concurrency: -1}, true},
-		{"negative max retry", Config[int]{Concurrency: 1, MaxRetry: -1}, true},
+		{"negative max retries", Config[int]{Concurrency: 1, MaxRetries: -1}, true},
 		{"negative timeout", Config[int]{Concurrency: 1, Timeout: -1}, true},
 		{"valid with timeout", Config[int]{Concurrency: 1, Timeout: time.Second}, false},
 	}
@@ -55,7 +55,7 @@ func TestConfig_Callbacks(t *testing.T) {
 	}
 	exec, err := New(config)
 	assert.NoError(t, err)
-	result, err := exec.Run(context.Background(), []int{1, 2, 3}, func(context.Context, int) error {
+	result, err := exec.Run(t.Context(), []int{1, 2, 3}, func(context.Context, int) error {
 		return nil
 	})
 	assert.NoError(t, err)

@@ -20,10 +20,12 @@ func TestTree_Walk_Level(t *testing.T) {
 	require.NoError(t, err)
 
 	var levels []int
-	tree.Walk(func(n *Node[TestItem], _ *Node[TestItem]) bool {
+	ok, err := tree.Walk(func(n *Node[TestItem], _ *Node[TestItem]) bool {
 		levels = append(levels, n.Level)
 		return true
 	})
+	require.NoError(t, err)
+	assert.True(t, ok)
 
 	assert.Equal(t, []int{1, 2, 3, 2}, levels)
 }
@@ -58,7 +60,7 @@ func TestTree_Walk_Parent(t *testing.T) {
 	require.NoError(t, err)
 
 	var parentNames []string
-	tree.Walk(func(_ *Node[TestItem], parent *Node[TestItem]) bool {
+	ok, err := tree.Walk(func(_ *Node[TestItem], parent *Node[TestItem]) bool {
 		if parent == nil {
 			parentNames = append(parentNames, "")
 		} else {
@@ -66,6 +68,8 @@ func TestTree_Walk_Parent(t *testing.T) {
 		}
 		return true
 	})
+	require.NoError(t, err)
+	assert.True(t, ok)
 
 	assert.Equal(t, []string{"", "Root", "Child"}, parentNames)
 }
@@ -81,10 +85,12 @@ func TestTree_Walk_Stop(t *testing.T) {
 	require.NoError(t, err)
 
 	var names []string
-	tree.Walk(func(n *Node[TestItem], _ *Node[TestItem]) bool {
+	stopped, err := tree.Walk(func(n *Node[TestItem], _ *Node[TestItem]) bool {
 		names = append(names, n.Item.Name)
 		return n.Item.Name != "B"
 	})
+	require.NoError(t, err)
+	assert.False(t, stopped)
 
 	assert.Equal(t, []string{"A", "B"}, names)
 }
@@ -98,16 +104,18 @@ func TestTree_Walk_ClonePreservesLevel(t *testing.T) {
 	tree, err := b.Build()
 	require.NoError(t, err)
 
-	tree.Walk(func(*Node[TestItem], *Node[TestItem]) bool {
+	_, err = tree.Walk(func(*Node[TestItem], *Node[TestItem]) bool {
 		return true
 	})
+	require.NoError(t, err)
 
 	cloned := tree.Clone()
 	var levels []int
-	cloned.Walk(func(n *Node[TestItem], _ *Node[TestItem]) bool {
+	_, err = cloned.Walk(func(n *Node[TestItem], _ *Node[TestItem]) bool {
 		levels = append(levels, n.Level)
 		return true
 	})
+	require.NoError(t, err)
 
 	assert.Equal(t, []int{1, 2}, levels)
 }
@@ -142,7 +150,8 @@ func TestTree_Map_PreservesLevel(t *testing.T) {
 	tree, err := b.Build()
 	require.NoError(t, err)
 
-	mapped := tree.Map(func(c TestItem) TestItem { return c }, func(c TestItem) int { return c.ID })
+	mapped, err := tree.Map(func(c TestItem) TestItem { return c }, func(c TestItem) int { return c.ID })
+	require.NoError(t, err)
 
 	assert.Len(t, mapped.Roots(), 1)
 	assert.Equal(t, 1, mapped.Roots()[0].Level)
@@ -158,14 +167,27 @@ func TestTree_Map_RebuildsParentIndex(t *testing.T) {
 	tree, err := b.Build()
 	require.NoError(t, err)
 
-	mapped := tree.Map(func(item TestItem) TestItem {
+	mapped, err := tree.Map(func(item TestItem) TestItem {
 		item.ID += 10
 		return item
 	}, keyFn)
+	require.NoError(t, err)
 
 	parent, ok := mapped.ParentOf(12)
 	require.True(t, ok)
 	assert.Equal(t, 11, parent)
+}
+
+func TestTree_Map_NilCallbacks(t *testing.T) {
+	b := NewBuilder[TestItem, int]().KeyBy(keyFn).WithItems([]TestItem{{ID: 1}})
+	tree, err := b.Build()
+	require.NoError(t, err)
+
+	_, err = tree.Map(nil, keyFn)
+	assert.ErrorIs(t, err, ErrNilCallback)
+
+	_, err = tree.Map(func(item TestItem) TestItem { return item }, nil)
+	assert.ErrorIs(t, err, ErrNilCallback)
 }
 
 func TestTree_Filter_RebuildsConsistentTree(t *testing.T) {
@@ -179,9 +201,10 @@ func TestTree_Filter_RebuildsConsistentTree(t *testing.T) {
 	tree, err := b.Build()
 	require.NoError(t, err)
 
-	filtered := tree.Filter(func(node *Node[TestItem]) bool {
+	filtered, err := tree.Filter(func(node *Node[TestItem]) bool {
 		return node.Item.ID == 2 || node.Item.ID == 4
 	})
+	require.NoError(t, err)
 
 	assert.Equal(t, 2, filtered.Len())
 	assert.True(t, filtered.ContainsKey(2))
@@ -270,9 +293,7 @@ func TestTree_Subtree_ConcurrentReaders(t *testing.T) {
 	var wg sync.WaitGroup
 	errCh := make(chan error, 25)
 	for range 25 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			subtree, ok := tree.Subtree(2)
 			if !ok {
 				errCh <- assert.AnError
@@ -281,7 +302,7 @@ func TestTree_Subtree_ConcurrentReaders(t *testing.T) {
 			if subtree.Len() != 2 {
 				errCh <- assert.AnError
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errCh)

@@ -203,7 +203,7 @@ func BenchmarkDeduplicate(b *testing.B) {
 	for i := range input {
 		input[i] = i % 100
 	}
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		Deduplicate(input)
 	}
 }

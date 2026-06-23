@@ -2,7 +2,6 @@ package tree
 
 import "slices"
 
-// Flattener converts tree nodes back into a flat item slice.
 type Flattener[T any, K comparable] struct {
 	keyFn    func(T) K
 	parentFn func(T, K) T
@@ -17,13 +16,11 @@ func (f *Flattener[T, K]) KeyBy(fn func(T) K) *Flattener[T, K] {
 	return f
 }
 
-// ParentBy sets the function used to write parent keys into flattened items.
 func (f *Flattener[T, K]) ParentBy(fn func(T, K) T) *Flattener[T, K] {
 	f.parentFn = fn
 	return f
 }
 
-// Flatten returns a pre-order slice of items from roots.
 func (f *Flattener[T, K]) Flatten(roots []*Node[T]) ([]T, error) {
 	if f.keyFn == nil {
 		return nil, ErrKeyNotSet

@@ -84,7 +84,8 @@ func TestBuilder_AddItemWithParent_AllowsZeroValueParentKey(t *testing.T) {
 func TestBuilder_Filter(t *testing.T) {
 	b := NewBuilder[TestItem, int]()
 	b.KeyBy(keyFn).WithItems([]TestItem{{ID: 1}, {ID: 2}})
-	nb := b.Filter(func(c TestItem) bool { return c.ID == 1 })
+	nb, err := b.Filter(func(c TestItem) bool { return c.ID == 1 })
+	require.NoError(t, err)
 	assert.Len(t, nb.items, 1)
 }
 
@@ -92,10 +93,11 @@ func TestBuilder_Filter_CopiesInternalItems(t *testing.T) {
 	b := NewBuilder[TestItem, int]()
 	b.KeyBy(keyFn).WithItems([]TestItem{{ID: 1, Name: "original"}})
 
-	nb := b.Filter(func(c TestItem) bool { return c.ID == 1 })
+	nb, err := b.Filter(func(c TestItem) bool { return c.ID == 1 })
+	require.NoError(t, err)
 	require.Len(t, nb.items, 1)
 
-	nb.Transform(func(item *TestItem) { item.Name = "filtered" })
+	require.NoError(t, nb.Transform(func(item *TestItem) { item.Name = "filtered" }))
 
 	assert.Equal(t, "original", b.items[0].data.Name)
 	assert.Equal(t, "filtered", nb.items[0].data.Name)
@@ -104,7 +106,7 @@ func TestBuilder_Filter_CopiesInternalItems(t *testing.T) {
 func TestBuilder_Transform(t *testing.T) {
 	b := NewBuilder[TestItem, int]()
 	b.KeyBy(keyFn).WithItems([]TestItem{{ID: 1, Name: "Original"}})
-	b.Transform(func(c *TestItem) { c.Name = "Transformed" })
+	require.NoError(t, b.Transform(func(c *TestItem) { c.Name = "Transformed" }))
 	assert.Equal(t, "Transformed", b.items[0].data.Name)
 }
 
@@ -156,9 +158,15 @@ func TestBuilder_ContainsItem(t *testing.T) {
 	b := NewBuilder[TestItem, int]()
 	b.WithItems([]TestItem{{ID: 1, Name: "Alice"}, {ID: 2, Name: "Bob"}})
 
-	assert.True(t, b.ContainsItem(func(item TestItem) bool { return item.Name == "Bob" }))
-	assert.False(t, b.ContainsItem(func(item TestItem) bool { return item.Name == "Carol" }))
-	assert.False(t, b.ContainsItem(nil))
+	ok, err := b.ContainsItem(func(item TestItem) bool { return item.Name == "Bob" })
+	require.NoError(t, err)
+	assert.True(t, ok)
+	ok, err = b.ContainsItem(func(item TestItem) bool { return item.Name == "Carol" })
+	require.NoError(t, err)
+	assert.False(t, ok)
+	ok, err = b.ContainsItem(nil)
+	assert.ErrorIs(t, err, ErrNilCallback)
+	assert.False(t, ok)
 }
 
 func TestBuilder_Build_DuplicateKey(t *testing.T) {
@@ -207,7 +215,8 @@ func TestBuilder_Statistics_Empty(t *testing.T) {
 func TestBuilder_Map(t *testing.T) {
 	b := NewBuilder[TestItem, int]()
 	b.KeyBy(keyFn).WithItems([]TestItem{{ID: 1}})
-	nb := b.Map(func(c TestItem) TestItem { return c }, func(c TestItem) int { return c.ID })
+	nb, err := b.Map(func(c TestItem) TestItem { return c }, func(c TestItem) int { return c.ID })
+	require.NoError(t, err)
 	stats, err := nb.Statistics()
 	require.NoError(t, err)
 	assert.Equal(t, 1, stats.TotalNodes)
@@ -278,20 +287,43 @@ func TestBuilder_Filter_EdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			b := NewBuilder[TestItem, int]().KeyBy(keyFn)
-			nb := b.WithItems(tt.items).Filter(tt.filter)
+			nb, err := b.WithItems(tt.items).Filter(tt.filter)
+			require.NoError(t, err)
 			assert.Len(t, nb.items, tt.want)
 		})
 	}
 }
 
+func TestBuilder_Filter_NilPredicate(t *testing.T) {
+	b := NewBuilder[TestItem, int]().KeyBy(keyFn)
+	b.WithItems([]TestItem{{ID: 1}, {ID: 2}})
+
+	filtered, err := b.Filter(nil)
+
+	assert.Nil(t, filtered)
+	assert.ErrorIs(t, err, ErrNilCallback)
+}
+
 func TestBuilder_Map_EdgeCases(t *testing.T) {
 	b := NewBuilder[TestItem, int]()
 	b.KeyBy(keyFn).WithItems([]TestItem{{ID: 1, Name: "A"}, {ID: 2, Name: "B"}})
-	nb := b.Map(
+	nb, err := b.Map(
 		func(c TestItem) TestItem { c.Name = c.Name + "!"; return c },
 		func(c TestItem) int { return c.ID },
 	)
+	require.NoError(t, err)
 	assert.Len(t, nb.items, 2)
+}
+
+func TestBuilder_Map_NilCallbacks(t *testing.T) {
+	b := NewBuilder[TestItem, int]().KeyBy(keyFn)
+	b.WithItems([]TestItem{{ID: 1, Name: "A"}})
+
+	_, err := b.Map(nil, keyFn)
+	assert.ErrorIs(t, err, ErrNilCallback)
+
+	_, err = b.Map(func(item TestItem) TestItem { return item }, nil)
+	assert.ErrorIs(t, err, ErrNilCallback)
 }
 
 func TestBuilder_UpdateItem_KeyChange(t *testing.T) {
@@ -314,6 +346,18 @@ func TestBuilder_UpdateItem_KeyConflictAfterChange(t *testing.T) {
 
 	err := b.UpdateItem(1, func(item *TestItem) { item.ID = 2 })
 	assert.ErrorIs(t, err, ErrDuplicateKey)
+}
+
+func TestBuilder_UpdateItem_NilCallback(t *testing.T) {
+	b := NewBuilder[TestItem, int]().KeyBy(keyFn)
+	b.WithItems([]TestItem{{ID: 1, Name: "A"}})
+
+	err := b.UpdateItem(1, nil)
+
+	assert.ErrorIs(t, err, ErrNilCallback)
+	node, err := b.Find(func(item TestItem) bool { return item.ID == 1 })
+	require.NoError(t, err)
+	assert.Equal(t, "A", node.Item.Name)
 }
 
 func TestBuilder_IsDescendant(t *testing.T) {
@@ -447,10 +491,12 @@ func TestBuilder_SortBy_Effect(t *testing.T) {
 	require.NoError(t, err)
 
 	var names []string
-	tree.Walk(func(n *Node[TestItem], _ *Node[TestItem]) bool {
+	ok, err := tree.Walk(func(n *Node[TestItem], _ *Node[TestItem]) bool {
 		names = append(names, n.Item.Name)
 		return true
 	})
+	require.NoError(t, err)
+	assert.True(t, ok)
 	assert.Equal(t, []string{"C", "A", "B"}, names)
 }
 
@@ -458,11 +504,9 @@ func TestBuilder_ConcurrentWrites(t *testing.T) {
 	b := NewBuilder[TestItem, int]().KeyBy(keyFn)
 	var wg sync.WaitGroup
 	for i := range 100 {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			b.AddItem(TestItem{ID: id})
-		}(i)
+		wg.Go(func() {
+			b.AddItem(TestItem{ID: i})
+		})
 	}
 	wg.Wait()
 	assert.Equal(t, 100, len(b.items))
@@ -474,21 +518,18 @@ func TestBuilder_Concurrent_BuildWhileAdd(t *testing.T) {
 	b.WithItems([]TestItem{{ID: 1, Name: "Root", ParentID: 1}})
 
 	var wg sync.WaitGroup
-	wg.Add(2)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for i := 2; i <= 50; i++ {
 			b.AddItem(TestItem{ID: i, ParentID: 1})
 		}
-	}()
+	})
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for i := 51; i <= 100; i++ {
 			b.AddItem(TestItem{ID: i, ParentID: 1})
 		}
-	}()
+	})
 
 	wg.Wait()
 	tree, err := b.Build()
@@ -504,22 +545,18 @@ func TestBuilder_ConcurrentBuildDuringAdd(t *testing.T) {
 	errCh := make(chan error, 20)
 
 	for i := 2; i <= 50; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			b.AddItem(TestItem{ID: id, ParentID: 1})
-		}(i)
+		wg.Go(func() {
+			b.AddItem(TestItem{ID: i, ParentID: 1})
+		})
 	}
 
 	for range 10 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, err := b.Build()
 			if err != nil {
 				errCh <- err
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -547,10 +584,12 @@ func TestBuilder_SortByFunc(t *testing.T) {
 	require.NoError(t, err)
 
 	var names []string
-	tree.Walk(func(n *Node[TestItem], _ *Node[TestItem]) bool {
+	ok, err := tree.Walk(func(n *Node[TestItem], _ *Node[TestItem]) bool {
 		names = append(names, n.Item.Name)
 		return true
 	})
+	require.NoError(t, err)
+	assert.True(t, ok)
 	assert.Equal(t, []string{"C", "A", "B"}, names)
 }
 

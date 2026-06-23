@@ -57,8 +57,6 @@ func ReadSheet(path, name string) (rows [][]string, err error) {
 	return wb.Sheet(name).Rows()
 }
 
-// Walk opens path and calls fn for each row in one sheet. The index passed to
-// fn is 1-based to match spreadsheet row numbering.
 func Walk(path, name string, fn func(int, []string) error) (err error) {
 	if fn == nil {
 		return errNilCallback
@@ -76,8 +74,6 @@ func Walk(path, name string, fn func(int, []string) error) (err error) {
 	return wb.Sheet(name).Scan(fn)
 }
 
-// ScanRow parses each row into T and calls fn for rows that parse successfully.
-// The index passed to fn is 1-based. Rows that fail to parse are skipped.
 func ScanRow[T any](path, name string, fn func(int, *T) error) (err error) {
 	if fn == nil {
 		return errNilCallback
@@ -102,9 +98,6 @@ func ScanRow[T any](path, name string, fn func(int, *T) error) (err error) {
 	})
 }
 
-// ScanAll parses all rows in a sheet into T. Rows that fail to parse produce
-// nil entries; the index of each entry matches the 0-based row offset in the
-// sheet.
 func ScanAll[T any](path, name string) (result []*T, err error) {
 	wb, err := Open(path)
 	if err != nil {
@@ -127,7 +120,6 @@ func ScanAll[T any](path, name string) (result []*T, err error) {
 	return result, nil
 }
 
-// Parse maps row cells into T using struct fields tagged with excel column names.
 func Parse[T any](row []string) (*T, error) {
 	info, err := getStructInfo[T]()
 	if err != nil {
@@ -159,7 +151,6 @@ type Workbook struct {
 	file *excelize.File
 }
 
-// Open opens an Excel workbook at path. Call Close when the workbook is no longer needed.
 func Open(path string) (*Workbook, error) {
 	f, err := excelize.OpenFile(path)
 	if err != nil {
@@ -210,8 +201,6 @@ func (s *Sheet) Rows() ([][]string, error) {
 	return s.file.GetRows(s.name)
 }
 
-// Scan streams sheet rows and stops when fn returns an error. The index
-// passed to fn is 1-based to match spreadsheet row numbering.
 func (s *Sheet) Scan(fn func(idx int, row []string) error) (err error) {
 	if fn == nil {
 		return errNilCallback
@@ -246,17 +235,14 @@ type Row struct {
 	index  int
 }
 
-// Values returns a defensive copy of the row values.
 func (r *Row) Values() []string {
 	return slices.Clone(r.values)
 }
 
-// Index returns the 1-based row index.
 func (r *Row) Index() int {
 	return r.index
 }
 
-// Value returns the cell at zero-based column col, or an empty string if missing.
 func (r *Row) Value(col int) string {
 	if col < 0 || col >= len(r.values) {
 		return ""
@@ -286,10 +272,10 @@ func getStructInfo[T any]() (structInfo, error) {
 		return structInfo{}, errInvalidTarget
 	}
 
-	ptr := false
+	isPtr := false
 	elem := typ
-	if typ.Kind() == reflect.Ptr {
-		ptr = true
+	if typ.Kind() == reflect.Pointer {
+		isPtr = true
 		elem = typ.Elem()
 	}
 	if elem.Kind() != reflect.Struct {
@@ -307,7 +293,7 @@ func getStructInfo[T any]() (structInfo, error) {
 
 	info := structInfo{
 		typ:    elem,
-		ptr:    ptr,
+		ptr:    isPtr,
 		fields: fields,
 	}
 	structCache.Store(typ, info)
@@ -379,7 +365,7 @@ func setField(v reflect.Value, s string) error {
 		return nil
 	}
 
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		if s == "" {
 			v.Set(reflect.Zero(v.Type()))
 			return nil

@@ -13,10 +13,10 @@ func TestErrorAction_String(t *testing.T) {
 		action   ErrorAction
 		expected string
 	}{
-		{ActionContinue, "Continue"},
-		{ActionRetry, "Retry"},
-		{ActionAbort, "Abort"},
-		{ErrorAction(100), "Unknown"},
+		{ActionContinue, "continue"},
+		{ActionRetry, "retry"},
+		{ActionAbort, "abort"},
+		{ErrorAction(100), "unknown"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
@@ -31,7 +31,7 @@ func TestHandler(t *testing.T) {
 		called = true
 		return nil
 	}
-	err := handler(context.Background(), 1)
+	err := handler(t.Context(), 1)
 	assert.NoError(t, err)
 	assert.True(t, called)
 }
@@ -41,7 +41,7 @@ func TestHandlerWithError(t *testing.T) {
 	handler := func(context.Context, int) error {
 		return expectedErr
 	}
-	err := handler(context.Background(), 1)
+	err := handler(t.Context(), 1)
 	assert.ErrorIs(t, err, expectedErr)
 }
 

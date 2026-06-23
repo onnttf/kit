@@ -335,14 +335,14 @@ func TestIsWeekday(t *testing.T) {
 
 func BenchmarkStartOfDay(b *testing.B) {
 	input := time.Date(2024, 3, 15, 14, 30, 45, 123456789, time.UTC)
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		StartOfDay(input)
 	}
 }
 
 func BenchmarkEndOfMonth(b *testing.B) {
 	input := time.Date(2024, 3, 15, 14, 30, 45, 123456789, time.UTC)
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		EndOfMonth(input)
 	}
 }

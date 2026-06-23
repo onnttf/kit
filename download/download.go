@@ -17,20 +17,20 @@ const (
 	defaultMaxBytes = 100 << 20
 )
 
-// ErrFileExists is returned when the destination already exists and overwrite is disabled.
-var ErrFileExists = errors.New("file already exists")
-
 var (
-	// ErrEmptyURL is returned when the source URL is empty.
-	ErrEmptyURL = errors.New("url is empty")
-	// ErrInvalidScheme is returned for non-HTTP(S) URLs.
-	ErrInvalidScheme = errors.New("invalid scheme")
-	// ErrEmptyHost is returned when the URL has no host.
-	ErrEmptyHost = errors.New("host is empty")
-	// ErrUnexpectedStatus is returned for non-200 HTTP responses.
-	ErrUnexpectedStatus = errors.New("unexpected http status")
-	// ErrResponseBodyTooLarge is returned when the configured size limit is exceeded.
-	ErrResponseBodyTooLarge = errors.New("body too large")
+	ErrEmptyURL = errors.New("download: url is empty")
+
+	ErrEmptyName = errors.New("download: file name is empty")
+
+	ErrFileExists = errors.New("download: file exists")
+
+	ErrInvalidScheme = errors.New("download: invalid scheme")
+
+	ErrEmptyHost = errors.New("download: host is empty")
+
+	ErrUnexpectedStatus = errors.New("download: unexpected http status")
+
+	ErrResponseBodyTooLarge = errors.New("download: body too large")
 )
 
 var getDefaultClient = sync.OnceValue(func() *http.Client {
@@ -72,14 +72,15 @@ func WithOverwrite() Option {
 
 func WithTimeout(d time.Duration) Option {
 	return func(c *config) {
+		if d <= 0 {
+			return
+		}
 		client := *c.client
 		client.Timeout = d
 		c.client = &client
 	}
 }
 
-// GetFile downloads rawURL to name using an atomic temporary file.
-// A nil context is treated as context.Background.
 func GetFile(ctx context.Context, rawURL, name string, opts ...Option) (err error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -89,6 +90,9 @@ func GetFile(ctx context.Context, rawURL, name string, opts ...Option) (err erro
 
 	if rawURL == "" {
 		return ErrEmptyURL
+	}
+	if name == "" {
+		return ErrEmptyName
 	}
 	if err := validateURL(rawURL); err != nil {
 		return err
@@ -100,27 +104,15 @@ func GetFile(ctx context.Context, rawURL, name string, opts ...Option) (err erro
 		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	resp, err := openResponse(ctx, cfg, rawURL)
 	if err != nil {
-		return fmt.Errorf("create request: %w", err)
-	}
-
-	resp, err := cfg.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("send request: %w", err)
+		return err
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); err == nil && closeErr != nil {
 			err = fmt.Errorf("close response body: %w", closeErr)
 		}
 	}()
-
-	if err := checkResponse(resp, cfg.maxBytes); err != nil {
-		if _, copyErr := discardLimited(resp.Body, cfg.maxBytes); copyErr != nil {
-			return fmt.Errorf("discard response body: %w", copyErr)
-		}
-		return err
-	}
 
 	dir := filepath.Dir(name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -174,7 +166,6 @@ func GetFile(ctx context.Context, rawURL, name string, opts ...Option) (err erro
 	return nil
 }
 
-// A nil context is treated as context.Background.
 func GetBytes(ctx context.Context, rawURL string, opts ...Option) (data []byte, err error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -189,27 +180,15 @@ func GetBytes(ctx context.Context, rawURL string, opts ...Option) (data []byte, 
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	resp, err := openResponse(ctx, cfg, rawURL)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	resp, err := cfg.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
+		return nil, err
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); err == nil && closeErr != nil {
 			err = fmt.Errorf("close response body: %w", closeErr)
 		}
 	}()
-
-	if err := checkResponse(resp, cfg.maxBytes); err != nil {
-		if _, copyErr := discardLimited(resp.Body, cfg.maxBytes); copyErr != nil {
-			return nil, fmt.Errorf("discard response body: %w", copyErr)
-		}
-		return nil, err
-	}
 
 	data, err = readLimited(resp.Body, cfg.maxBytes)
 	if err != nil {
@@ -227,6 +206,9 @@ func newConfig(opts ...Option) *config {
 	}
 
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(cfg)
 	}
 
@@ -245,6 +227,36 @@ func validateURL(rawURL string) error {
 		return ErrEmptyHost
 	}
 	return nil
+}
+
+func openResponse(ctx context.Context, cfg *config, rawURL string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := cfg.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+
+	if err := checkResponse(resp, cfg.maxBytes); err != nil {
+		if _, copyErr := io.Copy(io.Discard, io.LimitReader(resp.Body, cfg.maxBytes)); copyErr != nil {
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				return nil, errors.Join(
+					fmt.Errorf("discard response body: %w", copyErr),
+					fmt.Errorf("close response body: %w", closeErr),
+				)
+			}
+			return nil, fmt.Errorf("discard response body: %w", copyErr)
+		}
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			return nil, errors.Join(err, fmt.Errorf("close response body: %w", closeErr))
+		}
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 func defaultTransport() *http.Transport {
@@ -288,8 +300,4 @@ func copyLimited(dst io.Writer, src io.Reader, maxBytes int64) error {
 		return ErrResponseBodyTooLarge
 	}
 	return nil
-}
-
-func discardLimited(r io.Reader, maxBytes int64) (int64, error) {
-	return io.Copy(io.Discard, io.LimitReader(r, maxBytes))
 }

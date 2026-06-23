@@ -6,19 +6,23 @@ import (
 )
 
 const (
-	MsgTypeText       = "text"
-	MsgTypeMarkdown   = "markdown"
-	MsgTypeLink       = "link"
-	MsgTypeActionCard = "actionCard"
-	MsgTypeFeedCard   = "feedCard"
+	MessageTypeText = "text"
+
+	MessageTypeMarkdown = "markdown"
+
+	MessageTypeLink = "link"
+
+	MessageTypeActionCard = "actionCard"
+
+	MessageTypeFeedCard = "feedCard"
 )
 
 const (
-	BtnOrientationHorizontal = "0"
-	BtnOrientationVertical   = "1"
+	OrientationHorizontal = "0"
+
+	OrientationVertical = "1"
 )
 
-// Message is implemented by DingTalk robot message payloads.
 type Message interface {
 	Payload() ([]byte, error)
 }
@@ -28,36 +32,36 @@ type At struct {
 	IsAtAll   bool     `json:"isAtAll"`
 }
 
-type TextMsg struct {
-	MsgType string `json:"msgtype"`
-	Text    struct {
+type TextMessage struct {
+	Type string `json:"msgtype"`
+	Text struct {
 		Content string `json:"content"`
 	} `json:"text"`
 	At At `json:"at"`
 }
 
-func NewTextMsg(content string) *TextMsg {
-	m := &TextMsg{MsgType: MsgTypeText}
+func NewTextMessage(content string) *TextMessage {
+	m := &TextMessage{Type: MessageTypeText}
 	m.Text.Content = content
 	return m
 }
 
-func (m *TextMsg) WithAtMobiles(mobiles []string) *TextMsg {
+func (m *TextMessage) WithAtMobiles(mobiles []string) *TextMessage {
 	m.At.AtMobiles = slices.Clone(mobiles)
 	return m
 }
 
-func (m *TextMsg) WithIsAtAll(isAll bool) *TextMsg {
+func (m *TextMessage) WithIsAtAll(isAll bool) *TextMessage {
 	m.At.IsAtAll = isAll
 	return m
 }
 
-func (m *TextMsg) Payload() ([]byte, error) {
+func (m *TextMessage) Payload() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-type MarkdownMsg struct {
-	MsgType  string `json:"msgtype"`
+type MarkdownMessage struct {
+	Type     string `json:"msgtype"`
 	Markdown struct {
 		Title string `json:"title"`
 		Text  string `json:"text"`
@@ -65,30 +69,30 @@ type MarkdownMsg struct {
 	At At `json:"at"`
 }
 
-func NewMarkdownMsg(title, text string) *MarkdownMsg {
-	m := &MarkdownMsg{MsgType: MsgTypeMarkdown}
+func NewMarkdownMessage(title, text string) *MarkdownMessage {
+	m := &MarkdownMessage{Type: MessageTypeMarkdown}
 	m.Markdown.Title = title
 	m.Markdown.Text = text
 	return m
 }
 
-func (m *MarkdownMsg) WithAtMobiles(mobiles []string) *MarkdownMsg {
+func (m *MarkdownMessage) WithAtMobiles(mobiles []string) *MarkdownMessage {
 	m.At.AtMobiles = slices.Clone(mobiles)
 	return m
 }
 
-func (m *MarkdownMsg) WithIsAtAll(isAll bool) *MarkdownMsg {
+func (m *MarkdownMessage) WithIsAtAll(isAll bool) *MarkdownMessage {
 	m.At.IsAtAll = isAll
 	return m
 }
 
-func (m *MarkdownMsg) Payload() ([]byte, error) {
+func (m *MarkdownMessage) Payload() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-type LinkMsg struct {
-	MsgType string `json:"msgtype"`
-	Link    struct {
+type LinkMessage struct {
+	Type string `json:"msgtype"`
+	Link struct {
 		Title      string `json:"title"`
 		Text       string `json:"text"`
 		PicURL     string `json:"picUrl,omitempty"`
@@ -96,42 +100,42 @@ type LinkMsg struct {
 	} `json:"link"`
 }
 
-func NewLinkMsg(title, text, messageURL string) *LinkMsg {
-	m := &LinkMsg{MsgType: MsgTypeLink}
+func NewLinkMessage(title, text, messageURL string) *LinkMessage {
+	m := &LinkMessage{Type: MessageTypeLink}
 	m.Link.Title = title
 	m.Link.Text = text
 	m.Link.MessageURL = messageURL
 	return m
 }
 
-func (m *LinkMsg) WithPicURL(url string) *LinkMsg {
+func (m *LinkMessage) WithPicURL(url string) *LinkMessage {
 	m.Link.PicURL = url
 	return m
 }
 
-func (m *LinkMsg) Payload() ([]byte, error) {
+func (m *LinkMessage) Payload() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-type ActionCardBtn struct {
+type ActionCardButton struct {
 	Title     string `json:"title"`
 	ActionURL string `json:"actionURL"`
 }
 
-type ActionCardMsg struct {
-	MsgType    string `json:"msgtype"`
+type ActionCardMessage struct {
+	Type       string `json:"msgtype"`
 	ActionCard struct {
-		Title          string          `json:"title"`
-		Text           string          `json:"text"`
-		SingleTitle    string          `json:"singleTitle,omitempty"`
-		SingleURL      string          `json:"singleURL,omitempty"`
-		BtnOrientation string          `json:"btnOrientation,omitempty"`
-		Btns           []ActionCardBtn `json:"btns,omitempty"`
+		Title       string             `json:"title"`
+		Text        string             `json:"text"`
+		SingleTitle string             `json:"singleTitle,omitempty"`
+		SingleURL   string             `json:"singleURL,omitempty"`
+		Orientation string             `json:"btnOrientation,omitempty"`
+		Btns        []ActionCardButton `json:"btns,omitempty"`
 	} `json:"actionCard"`
 }
 
-func NewSingleActionCard(title, text, singleTitle, singleURL string) *ActionCardMsg {
-	m := &ActionCardMsg{MsgType: MsgTypeActionCard}
+func NewSingleActionCardMessage(title, text, singleTitle, singleURL string) *ActionCardMessage {
+	m := &ActionCardMessage{Type: MessageTypeActionCard}
 	m.ActionCard.Title = title
 	m.ActionCard.Text = text
 	m.ActionCard.SingleTitle = singleTitle
@@ -139,22 +143,22 @@ func NewSingleActionCard(title, text, singleTitle, singleURL string) *ActionCard
 	return m
 }
 
-func NewMultiActionCard(title, text string, btns []ActionCardBtn) *ActionCardMsg {
-	m := &ActionCardMsg{MsgType: MsgTypeActionCard}
+func NewMultiActionCardMessage(title, text string, btns []ActionCardButton) *ActionCardMessage {
+	m := &ActionCardMessage{Type: MessageTypeActionCard}
 	m.ActionCard.Title = title
 	m.ActionCard.Text = text
 	m.ActionCard.Btns = slices.Clone(btns)
 	return m
 }
 
-func (m *ActionCardMsg) WithBtnOrientation(orientation string) *ActionCardMsg {
-	if orientation == BtnOrientationHorizontal || orientation == BtnOrientationVertical {
-		m.ActionCard.BtnOrientation = orientation
+func (m *ActionCardMessage) WithButtonOrientation(orientation string) *ActionCardMessage {
+	if orientation == OrientationHorizontal || orientation == OrientationVertical {
+		m.ActionCard.Orientation = orientation
 	}
 	return m
 }
 
-func (m *ActionCardMsg) Payload() ([]byte, error) {
+func (m *ActionCardMessage) Payload() ([]byte, error) {
 	return json.Marshal(m)
 }
 
@@ -164,27 +168,27 @@ type FeedLink struct {
 	PicURL     string `json:"picURL"`
 }
 
-type FeedCardMsg struct {
-	MsgType  string `json:"msgtype"`
+type FeedCardMessage struct {
+	Type     string `json:"msgtype"`
 	FeedCard struct {
 		Links []FeedLink `json:"links"`
 	} `json:"feedCard"`
 }
 
-func NewFeedCardMsg(links []FeedLink) *FeedCardMsg {
-	m := &FeedCardMsg{MsgType: MsgTypeFeedCard}
+func NewFeedCardMessage(links []FeedLink) *FeedCardMessage {
+	m := &FeedCardMessage{Type: MessageTypeFeedCard}
 	m.FeedCard.Links = slices.Clone(links)
 	return m
 }
 
-func (m *FeedCardMsg) Payload() ([]byte, error) {
+func (m *FeedCardMessage) Payload() ([]byte, error) {
 	return json.Marshal(m)
 }
 
 var (
-	_ Message = (*TextMsg)(nil)
-	_ Message = (*MarkdownMsg)(nil)
-	_ Message = (*LinkMsg)(nil)
-	_ Message = (*ActionCardMsg)(nil)
-	_ Message = (*FeedCardMsg)(nil)
+	_ Message = (*TextMessage)(nil)
+	_ Message = (*MarkdownMessage)(nil)
+	_ Message = (*LinkMessage)(nil)
+	_ Message = (*ActionCardMessage)(nil)
+	_ Message = (*FeedCardMessage)(nil)
 )

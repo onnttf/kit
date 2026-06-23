@@ -5,11 +5,8 @@ import (
 	"slices"
 )
 
-// ErrNilCallback is returned when a required callback argument is nil.
 var ErrNilCallback = errors.New("container: callback is nil")
 
-// Difference returns the elements in s1 that are not present in s2.
-// The order from s1 is preserved.
 func Difference[T comparable](s1, s2 []T) []T {
 	if s1 == nil {
 		return nil
@@ -34,8 +31,6 @@ func Difference[T comparable](s1, s2 []T) []T {
 	return result
 }
 
-// Intersection returns the unique elements that appear in both slices.
-// The order follows their first occurrence in s1.
 func Intersection[T comparable](s1, s2 []T) []T {
 	if s1 == nil || s2 == nil {
 		return nil
@@ -66,8 +61,6 @@ func Intersection[T comparable](s1, s2 []T) []T {
 	return result
 }
 
-// Union returns unique elements from s1 followed by unique elements from s2.
-// The order of first occurrence is preserved.
 func Union[T comparable](s1, s2 []T) []T {
 	if s1 == nil && s2 == nil {
 		return nil
@@ -94,7 +87,6 @@ func Union[T comparable](s1, s2 []T) []T {
 	return result
 }
 
-// ValidValues returns a new slice without zero values; values are kept only if they pass all non-nil keep predicates.
 func ValidValues[T comparable](values []T, keep ...func(T) bool) []T {
 	if values == nil {
 		return nil
@@ -124,7 +116,6 @@ func ValidValues[T comparable](values []T, keep ...func(T) bool) []T {
 	return out
 }
 
-// Deduplicate returns a new slice with duplicate values removed in original order.
 func Deduplicate[T comparable](values []T) []T {
 	if values == nil {
 		return nil
@@ -146,8 +137,6 @@ func Deduplicate[T comparable](values []T) []T {
 	return out
 }
 
-// ToMap returns a map keyed by keySelector. Later items overwrite earlier ones
-// when the selector returns duplicate keys.
 func ToMap[T any, K comparable](input []T, keySelector func(T) K) (map[K]T, error) {
 	if keySelector == nil {
 		return nil, ErrNilCallback

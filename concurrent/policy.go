@@ -30,7 +30,6 @@ func AlwaysRetry[T any]() ErrorPolicy[T] {
 	}
 }
 
-// RetryOnTimeout retries errors wrapping context deadline or cancellation timeouts.
 func RetryOnTimeout[T any]() ErrorPolicy[T] {
 	return func(err error, _ T, _ int) ErrorAction {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -46,7 +45,6 @@ func AbortOnError[T any]() ErrorPolicy[T] {
 	}
 }
 
-// AbortOnFirstError aborts only the first error seen by this policy instance.
 func AbortOnFirstError[T any]() ErrorPolicy[T] {
 	var once sync.Once
 	return func(_ error, _ T, _ int) ErrorAction {
@@ -79,7 +77,6 @@ func AbortOnCondition[T any](shouldAbort func(error) bool) ErrorPolicy[T] {
 	}
 }
 
-// CombinePolicies evaluates policies in order and returns the first non-continue action.
 func CombinePolicies[T any](policies ...ErrorPolicy[T]) ErrorPolicy[T] {
 	return func(err error, item T, attempt int) ErrorAction {
 		for _, policy := range policies {

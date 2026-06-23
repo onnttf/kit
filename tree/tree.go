@@ -11,7 +11,6 @@ type Stats struct {
 	AvgChildren float64
 }
 
-// Tree is a built tree indexed by key.
 type Tree[T any, K comparable] struct {
 	roots     []*Node[T]
 	cache     map[K]*Node[T]
@@ -28,7 +27,6 @@ func (t *Tree[T, K]) ContainsKey(key K) bool {
 	return ok
 }
 
-// Get returns a copy of the node for key.
 func (t *Tree[T, K]) Get(key K) (*Node[T], bool) {
 	n, ok := t.cache[key]
 	if !ok {
@@ -37,7 +35,6 @@ func (t *Tree[T, K]) Get(key K) (*Node[T], bool) {
 	return cloneNode(n), true
 }
 
-// Roots returns copies of the root nodes.
 func (t *Tree[T, K]) Roots() []*Node[T] {
 	out := make([]*Node[T], len(t.roots))
 	for i, n := range t.roots {
@@ -59,7 +56,6 @@ func (t *Tree[T, K]) ParentOf(key K) (K, bool) {
 	return pk, ok
 }
 
-// Children returns copies of the direct children for key.
 func (t *Tree[T, K]) Children(key K) ([]*Node[T], bool) {
 	n, ok := t.cache[key]
 	if !ok {
@@ -72,10 +68,9 @@ func (t *Tree[T, K]) Children(key K) ([]*Node[T], bool) {
 	return children, true
 }
 
-// LeafNodes returns copies of all leaf nodes.
 func (t *Tree[T, K]) LeafNodes() []*Node[T] {
 	var leaves []*Node[T]
-	t.Walk(func(n *Node[T], _ *Node[T]) bool {
+	_, _ = t.Walk(func(n *Node[T], _ *Node[T]) bool {
 		if len(n.Children) == 0 {
 			leaves = append(leaves, cloneNode(n))
 		}
@@ -84,7 +79,6 @@ func (t *Tree[T, K]) LeafNodes() []*Node[T] {
 	return leaves
 }
 
-// Ancestors returns copies of ancestors from parent to root.
 func (t *Tree[T, K]) Ancestors(key K) ([]*Node[T], bool) {
 	if _, ok := t.cache[key]; !ok {
 		return nil, false
@@ -106,7 +100,6 @@ func (t *Tree[T, K]) Ancestors(key K) ([]*Node[T], bool) {
 	return ancestors, len(ancestors) > 0
 }
 
-// PathTo returns copies of nodes from a root to key.
 func (t *Tree[T, K]) PathTo(key K) ([]*Node[T], bool) {
 	n, ok := t.cache[key]
 	if !ok {
@@ -122,7 +115,6 @@ func (t *Tree[T, K]) PathTo(key K) ([]*Node[T], bool) {
 	return path, true
 }
 
-// Descendants returns copies of all descendants in depth-first pre-order.
 func (t *Tree[T, K]) Descendants(key K) ([]*Node[T], bool) {
 	n, ok := t.cache[key]
 	if !ok {
@@ -145,10 +137,9 @@ func (t *Tree[T, K]) Descendants(key K) ([]*Node[T], bool) {
 	return descendants, true
 }
 
-// Walk visits nodes in depth-first pre-order until fn returns false.
-func (t *Tree[T, K]) Walk(fn func(*Node[T], *Node[T]) bool) bool {
+func (t *Tree[T, K]) Walk(fn func(*Node[T], *Node[T]) bool) (bool, error) {
 	if fn == nil {
-		return true
+		return false, ErrNilCallback
 	}
 
 	type entry struct {
@@ -166,7 +157,7 @@ func (t *Tree[T, K]) Walk(fn func(*Node[T], *Node[T]) bool) bool {
 		stack = stack[:len(stack)-1]
 
 		if !fn(e.node, e.parent) {
-			return false
+			return false, nil
 		}
 
 		for _, child := range slices.Backward(e.node.Children) {
@@ -177,10 +168,14 @@ func (t *Tree[T, K]) Walk(fn func(*Node[T], *Node[T]) bool) bool {
 		}
 	}
 
-	return true
+	return true, nil
 }
 
-func (t *Tree[T, K]) Filter(fn func(*Node[T]) bool) *Tree[T, K] {
+func (t *Tree[T, K]) Filter(fn func(*Node[T]) bool) (*Tree[T, K], error) {
+	if fn == nil {
+		return nil, ErrNilCallback
+	}
+
 	var filteredRoots []*Node[T]
 	filteredCache := make(map[K]*Node[T])
 	filteredParentIdx := make(map[K]K)
@@ -216,10 +211,14 @@ func (t *Tree[T, K]) Filter(fn func(*Node[T]) bool) *Tree[T, K] {
 		cache:     filteredCache,
 		parentIdx: filteredParentIdx,
 		keyFn:     t.keyFn,
-	}
+	}, nil
 }
 
-func (t *Tree[T, K]) Map(fn func(T) T, keyFn func(T) K) *Tree[T, K] {
+func (t *Tree[T, K]) Map(fn func(T) T, keyFn func(T) K) (*Tree[T, K], error) {
+	if fn == nil || keyFn == nil {
+		return nil, ErrNilCallback
+	}
+
 	newRoots := make([]*Node[T], len(t.roots))
 
 	var mapNode func(*Node[T]) *Node[T]
@@ -247,10 +246,9 @@ func (t *Tree[T, K]) Map(fn func(T) T, keyFn func(T) K) *Tree[T, K] {
 		cache:     newCache,
 		parentIdx: newParentIdx,
 		keyFn:     keyFn,
-	}
+	}, nil
 }
 
-// Clone returns a deep copy of the tree structure.
 func (t *Tree[T, K]) Clone() *Tree[T, K] {
 	roots := make([]*Node[T], len(t.roots))
 	cache := make(map[K]*Node[T], len(t.cache))
@@ -285,7 +283,6 @@ func (t *Tree[T, K]) Clone() *Tree[T, K] {
 	}
 }
 
-// Subtree returns a tree rooted at a copy of key's node.
 func (t *Tree[T, K]) Subtree(key K) (*Tree[T, K], bool) {
 	if _, ok := t.cache[key]; !ok {
 		return nil, false

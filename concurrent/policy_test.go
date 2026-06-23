@@ -60,11 +60,9 @@ func TestAbortOnFirstError_Concurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	results := make([]ErrorAction, 10)
 	for i := range 10 {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			results[idx] = policy(errors.New("error"), idx, 0)
-		}(i)
+		wg.Go(func() {
+			results[i] = policy(errors.New("error"), i, 0)
+		})
 	}
 	wg.Wait()
 	abortCount := 0

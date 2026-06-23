@@ -8,7 +8,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Repository defines generic CRUD operations for a GORM-backed model.
 type Repository[T any] interface {
 	Insert(ctx context.Context, db *gorm.DB, newValue *T) error
 
@@ -32,13 +31,12 @@ type Repository[T any] interface {
 type Repo[T any] struct{}
 
 var (
-	// ErrDatabase wraps unexpected GORM operation errors.
-	ErrDatabase = errors.New("unexpected database error")
-	// ErrNoRowsAffected indicates that a write operation matched no rows.
-	ErrNoRowsAffected = errors.New("no rows affected")
+	ErrDatabase = errors.New("dal: unexpected database error")
+
+	ErrNoRowsAffected = errors.New("dal: no rows affected")
 )
 
-func NewRepo[T any]() *Repo[T] {
+func New[T any]() *Repo[T] {
 	return &Repo[T]{}
 }
 
@@ -53,7 +51,6 @@ func (r *Repo[T]) Insert(ctx context.Context, db *gorm.DB, newValue *T) error {
 	return handleExecError("insert", result)
 }
 
-// BatchInsert persists model values in batches. A non-positive batchSize uses a default.
 func (r *Repo[T]) BatchInsert(ctx context.Context, db *gorm.DB, newValues []*T, batchSize int) error {
 	if db == nil {
 		return errors.New("batch insert: db is nil")
@@ -73,7 +70,6 @@ func (r *Repo[T]) BatchInsert(ctx context.Context, db *gorm.DB, newValues []*T, 
 	return handleExecError("batch insert", result)
 }
 
-// Update updates non-zero fields in newValue for rows matched by scopes.
 func (r *Repo[T]) Update(ctx context.Context, db *gorm.DB, newValue *T, scopes ...func(db *gorm.DB) *gorm.DB) error {
 	if db == nil {
 		return errors.New("update: db is nil")
@@ -88,7 +84,6 @@ func (r *Repo[T]) Update(ctx context.Context, db *gorm.DB, newValue *T, scopes .
 	return handleExecError("update", result)
 }
 
-// UpdateFields updates explicit fields for rows matched by scopes.
 func (r *Repo[T]) UpdateFields(
 	ctx context.Context,
 	db *gorm.DB,
@@ -138,7 +133,6 @@ func (r *Repo[T]) Count(ctx context.Context, db *gorm.DB, scopes ...func(db *gor
 	return count, handleQueryError("count", result)
 }
 
-// Delete removes rows matched by scopes. At least one scope is required.
 func (r *Repo[T]) Delete(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) error {
 	if db == nil {
 		return errors.New("delete: db is nil")
@@ -150,7 +144,6 @@ func (r *Repo[T]) Delete(ctx context.Context, db *gorm.DB, scopes ...func(db *go
 	return handleExecError("delete", result)
 }
 
-// Raw executes a query and scans rows into []T.
 func (r *Repo[T]) Raw(ctx context.Context, db *gorm.DB, sql string, args ...any) ([]T, error) {
 	if db == nil {
 		return nil, errors.New("raw: db is nil")
@@ -163,7 +156,6 @@ func (r *Repo[T]) Raw(ctx context.Context, db *gorm.DB, sql string, args ...any)
 	return results, handleQueryError("raw", result)
 }
 
-// Exec executes a statement and allows zero affected rows.
 func Exec(ctx context.Context, db *gorm.DB, sql string, args ...any) error {
 	if db == nil {
 		return errors.New("exec: db is nil")
@@ -173,14 +165,14 @@ func Exec(ctx context.Context, db *gorm.DB, sql string, args ...any) error {
 	}
 	result := db.WithContext(ctx).Exec(sql, args...)
 	if result.Error != nil {
-		return fmt.Errorf("exec failed: %w: %w", ErrDatabase, result.Error)
+		return fmt.Errorf("exec: %w: %w", ErrDatabase, result.Error)
 	}
 	return nil
 }
 
 func handleExecError(op string, result *gorm.DB) error {
 	if result.Error != nil {
-		return fmt.Errorf("%s failed: %w: %w", op, ErrDatabase, result.Error)
+		return fmt.Errorf("%s: %w: %w", op, ErrDatabase, result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("%s: %w", op, ErrNoRowsAffected)
@@ -192,5 +184,5 @@ func handleQueryError(op string, result *gorm.DB) error {
 	if result.Error == nil {
 		return nil
 	}
-	return fmt.Errorf("%s failed: %w: %w", op, ErrDatabase, result.Error)
+	return fmt.Errorf("%s: %w: %w", op, ErrDatabase, result.Error)
 }

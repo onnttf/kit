@@ -71,11 +71,20 @@ func TestResult_IsComplete(t *testing.T) {
 	}
 }
 
+func TestResult_NilReceiver(t *testing.T) {
+	var result *Result
+
+	assert.Zero(t, result.Duration())
+	assert.False(t, result.HasErrors())
+	assert.Zero(t, result.SuccessRate())
+	assert.False(t, result.IsComplete())
+}
+
 func TestExecutor_Run_EmptyItemsInitializesErrorCount(t *testing.T) {
 	exec, err := New(Config[int]{Concurrency: 1})
 	require.NoError(t, err)
 
-	result, err := exec.Run(context.Background(), nil, func(context.Context, int) error {
+	result, err := exec.Run(t.Context(), nil, func(context.Context, int) error {
 		return nil
 	})
 

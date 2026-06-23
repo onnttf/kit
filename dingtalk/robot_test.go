@@ -2,7 +2,6 @@ package dingtalk
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"net/http"
 	"testing"
@@ -11,14 +10,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewRobot(t *testing.T) {
-	robot := NewRobot("test_token")
+func TestNew(t *testing.T) {
+	robot := New("test_token")
 	assert.Equal(t, "test_token", robot.accessToken)
 	assert.NotNil(t, robot.httpClient)
 }
 
-func TestNewRobot_DefaultTransportClonesHTTPDefaultTransport(t *testing.T) {
-	robot := NewRobot("test_token")
+func TestNew_DefaultTransportClonesHTTPDefaultTransport(t *testing.T) {
+	robot := New("test_token")
 
 	transport, ok := robot.httpClient.Transport.(*http.Transport)
 	assert.True(t, ok)
@@ -29,14 +28,14 @@ func TestNewRobot_DefaultTransportClonesHTTPDefaultTransport(t *testing.T) {
 }
 
 func TestRobot_WithSecret(t *testing.T) {
-	robot := NewRobot("test_token")
+	robot := New("test_token")
 	result := robot.WithSecret("test_secret")
 	assert.Equal(t, "test_secret", robot.secret)
 	assert.Same(t, robot, result)
 }
 
 func TestRobot_WithClient(t *testing.T) {
-	robot := NewRobot("test_token")
+	robot := New("test_token")
 	customClient := &http.Client{Timeout: 10 * time.Second}
 	result := robot.WithClient(customClient)
 	assert.Equal(t, customClient, robot.httpClient)
@@ -44,7 +43,7 @@ func TestRobot_WithClient(t *testing.T) {
 }
 
 func TestRobot_WithClient_NilClient(t *testing.T) {
-	robot := NewRobot("test_token")
+	robot := New("test_token")
 	originalClient := robot.httpClient
 	result := robot.WithClient(nil)
 	assert.Same(t, originalClient, robot.httpClient)
@@ -52,21 +51,21 @@ func TestRobot_WithClient_NilClient(t *testing.T) {
 }
 
 func TestRobot_SendWithContext_EmptyToken(t *testing.T) {
-	robot := NewRobot("")
-	err := robot.SendWithContext(context.Background(), NewTextMsg("Hello"))
+	robot := New("")
+	err := robot.SendWithContext(t.Context(), NewTextMessage("Hello"))
 	assert.Error(t, err)
 }
 
 func TestRobot_SendWithContext_NilClient(t *testing.T) {
-	robot := NewRobot("test_token")
+	robot := New("test_token")
 	robot.httpClient = nil
-	err := robot.SendWithContext(context.Background(), NewTextMsg("Hello"))
+	err := robot.SendWithContext(t.Context(), NewTextMessage("Hello"))
 	assert.Error(t, err)
 }
 
 func TestRobot_SendWithContext_NilMessage(t *testing.T) {
-	robot := NewRobot("test_token")
-	err := robot.SendWithContext(context.Background(), nil)
+	robot := New("test_token")
+	err := robot.SendWithContext(t.Context(), nil)
 	assert.Error(t, err)
 }
 
@@ -74,7 +73,7 @@ func TestRobot_SendWithContext_Success(t *testing.T) {
 	var gotMethod, gotContentType string
 	var gotBody []byte
 
-	robot := NewRobot("test_token").WithClient(&http.Client{
+	robot := New("test_token").WithClient(&http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			gotMethod = req.Method
 			gotContentType = req.Header.Get("Content-Type")
@@ -85,7 +84,7 @@ func TestRobot_SendWithContext_Success(t *testing.T) {
 		}),
 	})
 
-	err := robot.SendWithContext(context.Background(), NewTextMsg("Hello"))
+	err := robot.SendWithContext(t.Context(), NewTextMessage("Hello"))
 
 	assert.NoError(t, err)
 	assert.Equal(t, http.MethodPost, gotMethod)
@@ -95,31 +94,31 @@ func TestRobot_SendWithContext_Success(t *testing.T) {
 }
 
 func TestRobot_SendWithContext_DingTalkError(t *testing.T) {
-	robot := NewRobot("test_token").WithClient(&http.Client{
+	robot := New("test_token").WithClient(&http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return jsonResponse(http.StatusOK, `{"errcode":310000,"errmsg":"keywords not in content"}`), nil
 		}),
 	})
 
-	err := robot.SendWithContext(context.Background(), NewTextMsg("Hello"))
+	err := robot.SendWithContext(t.Context(), NewTextMessage("Hello"))
 
 	assert.ErrorIs(t, err, ErrUnexpectedResponse)
 }
 
 func TestRobot_SendWithContext_HTTPErrorIncludesBody(t *testing.T) {
-	robot := NewRobot("test_token").WithClient(&http.Client{
+	robot := New("test_token").WithClient(&http.Client{
 		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			return jsonResponse(http.StatusBadGateway, `bad gateway`), nil
 		}),
 	})
 
-	err := robot.SendWithContext(context.Background(), NewTextMsg("Hello"))
+	err := robot.SendWithContext(t.Context(), NewTextMessage("Hello"))
 
 	assert.ErrorIs(t, err, ErrUnexpectedStatus)
 }
 
 func TestRobot_CalculateSign(t *testing.T) {
-	robot := NewRobot("test_token")
+	robot := New("test_token")
 	robot.secret = "test_secret"
 	sign, err := robot.calculateSign(1234567890000)
 	assert.NoError(t, err)
@@ -127,7 +126,7 @@ func TestRobot_CalculateSign(t *testing.T) {
 }
 
 func TestMessagePayload(t *testing.T) {
-	msg := NewTextMsg("Hello")
+	msg := NewTextMessage("Hello")
 	payload, err := msg.Payload()
 	assert.NoError(t, err)
 	assert.NotEmpty(t, payload)

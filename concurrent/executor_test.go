@@ -29,7 +29,7 @@ func TestExecutor_Run(t *testing.T) {
 	t.Run("empty items", func(t *testing.T) {
 		exec, err := New(Config[int]{Concurrency: 1})
 		require.NoError(t, err)
-		result, err := exec.Run(context.Background(), []int{}, func(context.Context, int) error {
+		result, err := exec.Run(t.Context(), []int{}, func(context.Context, int) error {
 			return nil
 		})
 		require.NoError(t, err)
@@ -41,7 +41,7 @@ func TestExecutor_Run(t *testing.T) {
 		exec, err := New(Config[int]{Concurrency: 4})
 		require.NoError(t, err)
 		items := []int{1, 2, 3, 4, 5}
-		result, err := exec.Run(context.Background(), items, func(context.Context, int) error {
+		result, err := exec.Run(t.Context(), items, func(context.Context, int) error {
 			return nil
 		})
 		require.NoError(t, err)
@@ -61,7 +61,7 @@ func TestExecutor_Run(t *testing.T) {
 		})
 		require.NoError(t, err)
 		items := []int{1, 2, 3}
-		result, err := exec.Run(context.Background(), items, func(_ context.Context, item int) error {
+		result, err := exec.Run(t.Context(), items, func(_ context.Context, item int) error {
 			if item == 2 {
 				return errors.New("item 2 error")
 			}
@@ -79,7 +79,7 @@ func TestExecutor_Run(t *testing.T) {
 		})
 		require.NoError(t, err)
 		items := []int{1, 2, 3, 4, 5}
-		result, err := exec.Run(context.Background(), items, func(_ context.Context, item int) error {
+		result, err := exec.Run(t.Context(), items, func(_ context.Context, item int) error {
 			if item == 3 {
 				return errors.New("abort now")
 			}
@@ -92,11 +92,11 @@ func TestExecutor_Run(t *testing.T) {
 	t.Run("reuse error", func(t *testing.T) {
 		exec, err := New(Config[int]{Concurrency: 1})
 		require.NoError(t, err)
-		_, err = exec.Run(context.Background(), []int{1}, func(context.Context, int) error {
+		_, err = exec.Run(t.Context(), []int{1}, func(context.Context, int) error {
 			return nil
 		})
 		require.NoError(t, err)
-		_, err = exec.Run(context.Background(), []int{2}, func(context.Context, int) error {
+		_, err = exec.Run(t.Context(), []int{2}, func(context.Context, int) error {
 			return nil
 		})
 		assert.ErrorIs(t, err, ErrExecutorReused)
@@ -106,7 +106,7 @@ func TestExecutor_Run(t *testing.T) {
 		exec, err := New(Config[int]{Concurrency: 1})
 		require.NoError(t, err)
 
-		result, err := exec.Run(context.Background(), []int{1}, func(ctx context.Context, _ int) error {
+		result, err := exec.Run(t.Context(), []int{1}, func(ctx context.Context, _ int) error {
 			assert.NotNil(t, ctx)
 			return nil
 		})
@@ -123,7 +123,7 @@ func TestExecutor_RunStream(t *testing.T) {
 		require.NoError(t, err)
 		in := make(chan int)
 		close(in)
-		result, err := exec.RunStream(context.Background(), in, func(context.Context, int) error {
+		result, err := exec.RunStream(t.Context(), in, func(context.Context, int) error {
 			return nil
 		})
 		require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestExecutor_RunStream(t *testing.T) {
 			in <- i
 		}
 		close(in)
-		result, err := exec.RunStream(context.Background(), in, func(context.Context, int) error {
+		result, err := exec.RunStream(t.Context(), in, func(context.Context, int) error {
 			return nil
 		})
 		require.NoError(t, err)
@@ -153,7 +153,7 @@ func TestExecutor_RunStream(t *testing.T) {
 		in <- 1
 		close(in)
 
-		result, err := exec.RunStream(context.Background(), in, func(ctx context.Context, _ int) error {
+		result, err := exec.RunStream(t.Context(), in, func(ctx context.Context, _ int) error {
 			assert.NotNil(t, ctx)
 			return nil
 		})
@@ -166,7 +166,7 @@ func TestExecutor_RunStream(t *testing.T) {
 	t.Run("cancelled before enqueue does not count total", func(t *testing.T) {
 		exec, err := New(Config[int]{Concurrency: 1})
 		require.NoError(t, err)
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 
 		result, err := exec.RunStream(ctx, make(chan int), func(context.Context, int) error {
@@ -187,7 +187,7 @@ func TestExecutor_Panic(t *testing.T) {
 		})
 		require.NoError(t, err)
 		items := []int{1, 2, 3, 4}
-		result, err := exec.Run(context.Background(), items, func(_ context.Context, item int) error {
+		result, err := exec.Run(t.Context(), items, func(_ context.Context, item int) error {
 			if item == 2 {
 				panic("test panic")
 			}
@@ -204,7 +204,7 @@ func TestExecutor_Panic(t *testing.T) {
 		})
 		require.NoError(t, err)
 		items := []int{1, 2, 3, 4}
-		result, err := exec.Run(context.Background(), items, func(_ context.Context, item int) error {
+		result, err := exec.Run(t.Context(), items, func(_ context.Context, item int) error {
 			if item == 2 {
 				panic("test panic")
 			}
@@ -220,7 +220,7 @@ func TestExecutor_ConcurrentRuns(t *testing.T) {
 	for range 5 {
 		exec, err := New(Config[int]{Concurrency: 2})
 		require.NoError(t, err)
-		r, err := exec.Run(context.Background(), []int{1, 2, 3}, func(context.Context, int) error {
+		r, err := exec.Run(t.Context(), []int{1, 2, 3}, func(context.Context, int) error {
 			return nil
 		})
 		require.NoError(t, err)
@@ -235,7 +235,7 @@ func BenchmarkExecutor_Run(b *testing.B) {
 		items[i] = i
 	}
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		exec, _ := New(Config[int]{Concurrency: 10})
 		_, _ = exec.Run(context.Background(), items, func(context.Context, int) error {
 			return nil
@@ -243,17 +243,37 @@ func BenchmarkExecutor_Run(b *testing.B) {
 	}
 }
 
+func TestExecutor_Run_NilHandler(t *testing.T) {
+	exec, err := New(Config[int]{Concurrency: 1})
+	require.NoError(t, err)
+
+	result, err := exec.Run(t.Context(), []int{1}, nil)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, ErrNilHandler)
+}
+
+func TestExecutor_RunStream_NilHandler(t *testing.T) {
+	exec, err := New(Config[int]{Concurrency: 1})
+	require.NoError(t, err)
+
+	result, err := exec.RunStream(t.Context(), make(chan int), nil)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, ErrNilHandler)
+}
+
 func TestExecutor_Run_RetrySuccess(t *testing.T) {
 	var attempts atomic.Int64
 	exec, err := New(Config[int]{
 		Concurrency: 1,
-		MaxRetry:    2,
+		MaxRetries:  2,
 		Backoff:     ConstantBackoff(0),
 		ErrorPolicy: AlwaysRetry[int](),
 	})
 	require.NoError(t, err)
 
-	result, err := exec.Run(context.Background(), []int{1}, func(context.Context, int) error {
+	result, err := exec.Run(t.Context(), []int{1}, func(context.Context, int) error {
 		if attempts.Add(1) == 1 {
 			return errors.New("temporary")
 		}
@@ -267,10 +287,10 @@ func TestExecutor_Run_RetrySuccess(t *testing.T) {
 }
 
 func TestExecutor_Run_ContextCancellationDuringBackoff(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	exec, err := New(Config[int]{
 		Concurrency: 1,
-		MaxRetry:    5,
+		MaxRetries:  5,
 		Backoff:     ConstantBackoff(time.Minute),
 		ErrorPolicy: AlwaysRetry[int](),
 		OnError: func(context.Context, int, error, int) {
