@@ -1,0 +1,23 @@
+dal/database.go
+  s_2d125c1a9f80ba::t_1b427f87631fa7 111,115-116
+  s_2d125c1a9f80ba::t_a88cc92cc5ac21 117
+dal/database_test.go
+  s_2d125c1a9f80ba::t_1b427f87631fa7 104,108-118
+  s_2d125c1a9f80ba::t_f7c69d4c58d6d8 119-120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "2fdd3d00e76ddafd804101eb6801071c9b910fbc",
+  "prompts": {},
+  "sessions": {
+    "s_2d125c1a9f80ba": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f1367-d5e6-7dc2-bd92-b46e579e64ce",
+        "model": "gpt-5.5"
+      },
+      "human_author": "ZHANG PENG <onnttf@gmail.com>"
+    }
+  }
+}
