@@ -68,17 +68,51 @@ func TestRepo_UpdateFields(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestRepo_Update_NoScope(t *testing.T) {
+func TestRepo_Update_UsesDBConditionsWithoutScopes(t *testing.T) {
 	db := setupTestDB(t)
 	repo := New[testUser]()
+
+	user := &testUser{Name: "Before", Age: 25}
+	require.NoError(t, db.Create(user).Error)
+
+	err := repo.Update(t.Context(), db.Where("id = ?", user.ID), &testUser{Name: "After"})
+	require.NoError(t, err)
+
+	var result testUser
+	require.NoError(t, db.First(&result, user.ID).Error)
+	assert.Equal(t, "After", result.Name)
+}
+
+func TestRepo_Update_BareDBIsRejectedByGORM(t *testing.T) {
+	db := setupTestDB(t)
+	repo := New[testUser]()
+
+	require.NoError(t, db.Create(&testUser{Name: "Before", Age: 25}).Error)
 
 	err := repo.Update(t.Context(), db, &testUser{Name: "Unsafe"})
 	assert.Error(t, err)
 }
 
-func TestRepo_UpdateFields_NoScope(t *testing.T) {
+func TestRepo_UpdateFields_UsesDBConditionsWithoutScopes(t *testing.T) {
 	db := setupTestDB(t)
 	repo := New[testUser]()
+
+	user := &testUser{Name: "Before", Age: 25}
+	require.NoError(t, db.Create(user).Error)
+
+	err := repo.UpdateFields(t.Context(), db.Where("id = ?", user.ID), map[string]any{"name": "After"})
+	require.NoError(t, err)
+
+	var result testUser
+	require.NoError(t, db.First(&result, user.ID).Error)
+	assert.Equal(t, "After", result.Name)
+}
+
+func TestRepo_UpdateFields_BareDBIsRejectedByGORM(t *testing.T) {
+	db := setupTestDB(t)
+	repo := New[testUser]()
+
+	require.NoError(t, db.Create(&testUser{Name: "Before", Age: 25}).Error)
 
 	err := repo.UpdateFields(t.Context(), db, map[string]any{"name": "Unsafe"})
 	assert.Error(t, err)
@@ -151,9 +185,25 @@ func TestRepo_Delete(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestRepo_Delete_NoScope(t *testing.T) {
+func TestRepo_Delete_UsesDBConditionsWithoutScopes(t *testing.T) {
 	db := setupTestDB(t)
 	repo := New[testUser]()
+
+	require.NoError(t, db.Create(&testUser{Name: "DeleteMe", Age: 20}).Error)
+
+	err := repo.Delete(t.Context(), db.Where("name = ?", "DeleteMe"))
+	require.NoError(t, err)
+
+	var count int64
+	require.NoError(t, db.Model(&testUser{}).Where("name = ?", "DeleteMe").Count(&count).Error)
+	assert.Equal(t, int64(0), count)
+}
+
+func TestRepo_Delete_BareDBIsRejectedByGORM(t *testing.T) {
+	db := setupTestDB(t)
+	repo := New[testUser]()
+
+	require.NoError(t, db.Create(&testUser{Name: "DeleteMe", Age: 20}).Error)
 
 	err := repo.Delete(t.Context(), db)
 	assert.Error(t, err)

@@ -77,9 +77,6 @@ func (r *Repo[T]) Update(ctx context.Context, db *gorm.DB, newValue *T, scopes .
 	if newValue == nil {
 		return errors.New("update: new value is nil")
 	}
-	if len(scopes) == 0 {
-		return errors.New("update: scope is required")
-	}
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Updates(newValue)
 	return handleExecError("update", result)
 }
@@ -95,9 +92,6 @@ func (r *Repo[T]) UpdateFields(
 	}
 	if len(newValue) == 0 {
 		return errors.New("update fields: new value is empty")
-	}
-	if len(scopes) == 0 {
-		return errors.New("update fields: scope is required")
 	}
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Updates(newValue)
 	return handleExecError("update fields", result)
@@ -139,9 +133,6 @@ func (r *Repo[T]) Count(ctx context.Context, db *gorm.DB, scopes ...func(db *gor
 func (r *Repo[T]) Delete(ctx context.Context, db *gorm.DB, scopes ...func(db *gorm.DB) *gorm.DB) error {
 	if db == nil {
 		return errors.New("delete: db is nil")
-	}
-	if len(scopes) == 0 {
-		return errors.New("delete: scope is required")
 	}
 	result := db.WithContext(ctx).Model(new(T)).Scopes(scopes...).Delete(new(T))
 	return handleExecError("delete", result)
