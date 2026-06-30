@@ -1,7 +1,6 @@
 package dal
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -102,9 +101,21 @@ func TestRepo_QueryOne_NotFound(t *testing.T) {
 	repo := New[testUser]()
 
 	result, err := repo.QueryOne(t.Context(), db, Equal("name", "NonExistent"))
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, ErrDatabase))
+	assert.NoError(t, err)
 	assert.Nil(t, result)
+}
+
+func TestRepo_QueryOne_UsesExplicitOrder(t *testing.T) {
+	db := setupTestDB(t)
+	repo := New[testUser]()
+
+	require.NoError(t, db.Create(&testUser{Name: "Young", Age: 20}).Error)
+	require.NoError(t, db.Create(&testUser{Name: "Old", Age: 30}).Error)
+
+	result, err := repo.QueryOne(t.Context(), db, Order("age", "desc"))
+	assert.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "Old", result.Name)
 }
 
 func TestRepo_Query(t *testing.T) {

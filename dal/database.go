@@ -108,9 +108,12 @@ func (r *Repo[T]) QueryOne(ctx context.Context, db *gorm.DB, scopes ...func(db *
 		return nil, errors.New("query one: db is nil")
 	}
 	var record T
-	result := db.WithContext(ctx).Scopes(scopes...).First(&record)
+	result := db.WithContext(ctx).Scopes(scopes...).Limit(1).Find(&record)
 	if err := handleQueryError("query one", result); err != nil {
 		return nil, err
+	}
+	if result.RowsAffected == 0 {
+		return nil, nil
 	}
 	return &record, nil
 }
