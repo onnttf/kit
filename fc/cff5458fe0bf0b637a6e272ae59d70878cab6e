@@ -1,0 +1,28 @@
+gormx/scopes.go
+  s_83643a1e2d3ffa::t_2f5e5861c9b745 14,23,32,41,55,64,71,78
+excel/excel.go
+  s_83643a1e2d3ffa::t_2f5e5861c9b745 39,47,55-56
+tree/tree.go
+  s_83643a1e2d3ffa::t_2f5e5861c9b745 18-19
+tree/tree_test.go
+  s_83643a1e2d3ffa::t_94453027d3544b 6,186-203
+  s_83643a1e2d3ffa::t_79bd3751d884a9 204-205
+tree/builder.go
+  s_83643a1e2d3ffa::t_94453027d3544b 5-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "fccff5458fe0bf0b637a6e272ae59d70878cab6e",
+  "prompts": {},
+  "sessions": {
+    "s_83643a1e2d3ffa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3560-4c76-7ca2-93df-f8d452b60fd8",
+        "model": "gpt-5.5"
+      },
+      "human_author": "ZHANG PENG <onnttf@gmail.com>"
+    }
+  }
+}
