@@ -3,6 +3,7 @@ package download
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,373 +12,194 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestWithClient(t *testing.T) {
-	customClient := &http.Client{Timeout: 10 * time.Second}
-	opt := WithClient(customClient)
-	cfg := new(config)
-	opt(cfg)
-	assert.Equal(t, customClient, cfg.client)
-}
-
-func TestWithClient_NilClient(t *testing.T) {
-	opt := WithClient(nil)
-	cfg := new(config)
-	opt(cfg)
-	assert.Nil(t, cfg.client)
-}
-
-func TestWithMaxBytes(t *testing.T) {
-	opt := WithMaxBytes(1024)
-	cfg := new(config)
-	opt(cfg)
-	assert.Equal(t, int64(1024), cfg.maxBytes)
-}
-
-func TestWithMaxBytes_Zero(t *testing.T) {
-	opt := WithMaxBytes(0)
-	cfg := &config{maxBytes: 100}
-	opt(cfg)
-	assert.Equal(t, int64(100), cfg.maxBytes)
-}
-
-func TestWithOverwrite(t *testing.T) {
-	opt := WithOverwrite()
-	cfg := new(config)
-	opt(cfg)
-	assert.True(t, cfg.overwrite)
-}
-
-func TestWithTimeout(t *testing.T) {
-	opt := WithTimeout(30 * time.Second)
-	cfg := new(config)
-	client := *getDefaultClient()
-	cfg.client = &client
-	opt(cfg)
-	assert.Equal(t, 30*time.Second, cfg.client.Timeout)
-}
-
-func TestWithTimeout_NonPositive(t *testing.T) {
-	cfg := new(config)
-	client := *getDefaultClient()
-	cfg.client = &client
-	before := cfg.client.Timeout
-
-	WithTimeout(0)(cfg)
-	assert.Equal(t, before, cfg.client.Timeout)
-
-	WithTimeout(-time.Second)(cfg)
-	assert.Equal(t, before, cfg.client.Timeout)
-}
-
-func TestGetFile(t *testing.T) {
-	content := "test file content"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, err := w.Write([]byte(content))
-		assert.NoError(t, err)
+func TestBytes(t *testing.T) {
+	var header string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		header = r.Header.Get("X-Test")
+		_, _ = w.Write([]byte("ok"))
 	}))
-	defer server.Close()
+	defer srv.Close()
 
-	tmpDir := t.TempDir()
-	destPath := filepath.Join(tmpDir, "test.txt")
-	err := GetFile(t.Context(), server.URL, destPath)
-	require.NoError(t, err)
-	data, err := os.ReadFile(destPath)
-	require.NoError(t, err)
-	assert.Equal(t, content, string(data))
+	got, err := Bytes(context.Background(), srv.URL, WithHeader("X-Test", "yes"))
+	if err != nil {
+		t.Fatalf("Bytes() error = %v", err)
+	}
+	if string(got) != "ok" || header != "yes" {
+		t.Fatalf("Bytes() = %q, header %q", got, header)
+	}
 }
 
-func TestGetFile_EmptyURL(t *testing.T) {
-	tmpDir := t.TempDir()
-	destPath := filepath.Join(tmpDir, "test.txt")
-	err := GetFile(t.Context(), "", destPath)
-	assert.ErrorIs(t, err, ErrEmptyURL)
-}
-
-func TestGetFile_EmptyName(t *testing.T) {
-	err := GetFile(t.Context(), "https://example.com/file.txt", "")
-	assert.ErrorIs(t, err, ErrEmptyName)
-}
-
-func TestGetFile_InvalidURL(t *testing.T) {
-	tmpDir := t.TempDir()
-	destPath := filepath.Join(tmpDir, "test.txt")
-	err := GetFile(t.Context(), "://invalid", destPath)
-	assert.Error(t, err)
-}
-
-func TestGetFile_FileExists(t *testing.T) {
-	tmpDir := t.TempDir()
-	destPath := filepath.Join(tmpDir, "test.txt")
-	f, err := os.Create(destPath)
-	require.NoError(t, err)
-	require.NoError(t, f.Close())
-	err = GetFile(t.Context(), "https://example.com/file.txt", destPath)
-	assert.ErrorIs(t, err, ErrFileExists)
-}
-
-func TestGetFile_Overwrite(t *testing.T) {
-	content := "new content"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, err := w.Write([]byte(content))
-		assert.NoError(t, err)
-	}))
-	defer server.Close()
-
-	tmpDir := t.TempDir()
-	destPath := filepath.Join(tmpDir, "test.txt")
-	require.NoError(t, os.WriteFile(destPath, []byte("old content"), 0o644))
-
-	err := GetFile(t.Context(), server.URL, destPath, WithOverwrite())
-	require.NoError(t, err)
-	data, err := os.ReadFile(destPath)
-	require.NoError(t, err)
-	assert.Equal(t, content, string(data))
-}
-
-func TestGetFile_NoOverwriteRace(t *testing.T) {
-	content := "new content"
-	tmpDir := t.TempDir()
-	destPath := filepath.Join(tmpDir, "test.txt")
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		if err := os.WriteFile(destPath, []byte("existing"), 0o644); err != nil {
-			t.Errorf("write existing file: %v", err)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte(content)); err != nil {
-			t.Errorf("write response: %v", err)
-		}
-	}))
-	defer server.Close()
-
-	err := GetFile(t.Context(), server.URL, destPath)
-	require.ErrorIs(t, err, ErrFileExists)
-
-	data, readErr := os.ReadFile(destPath)
-	require.NoError(t, readErr)
-	assert.Equal(t, "existing", string(data))
-}
-
-func TestGetFile_Non200(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	tmpDir := t.TempDir()
-	destPath := filepath.Join(tmpDir, "test.txt")
-	err := GetFile(t.Context(), server.URL, destPath)
-	assert.Error(t, err)
-}
-
-func TestGetFile_NilContext(t *testing.T) {
-	content := "test"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, err := w.Write([]byte(content))
-		assert.NoError(t, err)
-	}))
-	defer server.Close()
-
-	tmpDir := t.TempDir()
-	destPath := filepath.Join(tmpDir, "test.txt")
-	var ctx context.Context
-	err := GetFile(ctx, server.URL, destPath)
-	require.NoError(t, err)
-}
-
-func TestGetBytes(t *testing.T) {
-	content := "test bytes content"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, err := w.Write([]byte(content))
-		assert.NoError(t, err)
-	}))
-	defer server.Close()
-
-	data, err := GetBytes(t.Context(), server.URL)
-	require.NoError(t, err)
-	assert.Equal(t, content, string(data))
-}
-
-func TestGetBytes_EmptyURL(t *testing.T) {
-	_, err := GetBytes(t.Context(), "")
-	assert.ErrorIs(t, err, ErrEmptyURL)
-}
-
-func TestGetBytes_BodyTooLarge(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte("abcdef")); err != nil {
-			t.Errorf("write response: %v", err)
-		}
-	}))
-	defer server.Close()
-
-	_, err := GetBytes(t.Context(), server.URL, WithMaxBytes(3))
-	assert.ErrorIs(t, err, ErrResponseBodyTooLarge)
-}
-
-func TestGetBytes_Non200DiscardsLimitedBody(t *testing.T) {
-	body := &countingBody{}
-	client := &http.Client{
-		Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: http.StatusInternalServerError,
-				Body:       body,
-			}, nil
-		}),
+func TestBytesErrors(t *testing.T) {
+	if _, err := Bytes(context.Background(), "ftp://example.com"); !errors.Is(err, ErrInvalidURL) {
+		t.Fatalf("invalid url error = %v", err)
 	}
 
-	_, err := GetBytes(
-		t.Context(),
-		"https://example.com/error",
-		WithClient(client),
-		WithMaxBytes(3),
-	)
-
-	assert.ErrorIs(t, err, ErrUnexpectedStatus)
-	assert.LessOrEqual(t, body.read, 3)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("too large"))
+	}))
+	defer srv.Close()
+	if _, err := Bytes(context.Background(), srv.URL, WithMaxBytes(2)); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("too large error = %v", err)
+	}
 }
 
-func TestValidateURL(t *testing.T) {
-	tests := []struct {
-		url      string
-		hasError bool
-	}{
-		{"https://example.com", false},
-		{"http://example.com", false},
-		{"", true},
-		{"ftp://example.com", true},
-		{"://invalid", true},
-		{"https://", true},
+func TestFile(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("file"))
+	}))
+	defer srv.Close()
+
+	path := filepath.Join(t.TempDir(), "nested", "out.txt")
+	if err := File(context.Background(), srv.URL, path); err != nil {
+		t.Fatalf("File() error = %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if string(data) != "file" {
+		t.Fatalf("file data = %q", data)
+	}
+	if err := File(context.Background(), srv.URL, path); !errors.Is(err, ErrExists) {
+		t.Fatalf("File(existing) error = %v", err)
+	}
+	if err := File(context.Background(), srv.URL, path, WithOverwrite(true)); err != nil {
+		t.Fatalf("File(overwrite) error = %v", err)
+	}
+}
+
+func TestClientReuseAndStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "no", http.StatusTeapot)
+	}))
+	defer srv.Close()
+
+	client := New(WithTimeout(time.Second))
+	if _, err := client.Bytes(context.Background(), srv.URL); !errors.Is(err, ErrUnexpectedStatus) {
+		t.Fatalf("Bytes(status) error = %v", err)
+	}
+}
+
+func TestBytesDefaultOptionsAndInvalidURLs(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	got, err := New(
+		WithHeader("", "ignored"),
+		WithTimeout(0),
+		WithMaxBytes(0),
+	).Bytes(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatalf("Bytes() error = %v", err)
+	}
+	if string(got) != "ok" {
+		t.Fatalf("Bytes() = %q", got)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.url, func(t *testing.T) {
-			err := validateURL(tt.url)
-			if tt.hasError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
+	for _, rawURL := range []string{"", "://bad", "mailto:a@example.com", "http://"} {
+		t.Run(rawURL, func(t *testing.T) {
+			_, err := Bytes(context.Background(), rawURL)
+			if !errors.Is(err, ErrInvalidURL) {
+				t.Fatalf("Bytes(%q) error = %v", rawURL, err)
 			}
 		})
 	}
 }
 
-func TestReadLimited(t *testing.T) {
-	data, err := readLimited(strings.NewReader("abc"), 3)
-	require.NoError(t, err)
-	assert.Equal(t, []byte("abc"), data)
+func TestBytesStatusAndRequestFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, strings.Repeat("x", 8192), http.StatusTeapot)
+	}))
+	defer srv.Close()
+	if _, err := Bytes(context.Background(), srv.URL); !errors.Is(err, ErrUnexpectedStatus) {
+		t.Fatalf("Bytes(status) error = %v", err)
+	}
 
-	_, err = readLimited(strings.NewReader("abcd"), 3)
-	assert.ErrorIs(t, err, ErrResponseBodyTooLarge)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := Bytes(ctx, "https://example.com"); err == nil || !strings.Contains(err.Error(), "download: request") {
+		t.Fatalf("Bytes(canceled) error = %v", err)
+	}
+}
+
+func TestBytesAllowsExactlyMaxBytes(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("abc"))
+	}))
+	defer srv.Close()
+
+	got, err := Bytes(context.Background(), srv.URL, WithMaxBytes(3))
+	if err != nil {
+		t.Fatalf("Bytes(exact max) error = %v", err)
+	}
+	if string(got) != "abc" {
+		t.Fatalf("Bytes(exact max) = %q", got)
+	}
+}
+
+func TestFileEdgeCases(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("0123456789"))
+	}))
+	defer srv.Close()
+
+	if err := File(context.Background(), srv.URL, ""); !errors.Is(err, ErrInvalidPath) {
+		t.Fatalf("File(empty path) error = %v", err)
+	}
+
+	tooLarge := filepath.Join(t.TempDir(), "too-large.txt")
+	if err := File(context.Background(), srv.URL, tooLarge, WithMaxBytes(3)); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("File(too large) error = %v", err)
+	}
+	if _, err := os.Stat(tooLarge); !os.IsNotExist(err) {
+		t.Fatalf("too-large target exists, stat err = %v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "out.txt")
+	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+		t.Fatalf("WriteFile(old) error = %v", err)
+	}
+	if err := File(context.Background(), srv.URL, path, WithOverwrite(true)); err != nil {
+		t.Fatalf("File(overwrite existing) error = %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(overwritten) error = %v", err)
+	}
+	if string(data) != "0123456789" {
+		t.Fatalf("overwritten data = %q", data)
+	}
+}
+
+func TestCustomHTTPClientAndTimeout(t *testing.T) {
+	transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Host != "example.com" {
+			return nil, fmt.Errorf("unexpected host %s", req.URL.Host)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("custom")),
+			Request:    req,
+		}, nil
+	})
+	client := New(WithHTTPClient(&http.Client{Transport: transport}), WithTimeout(time.Second))
+	got, err := client.Bytes(context.Background(), "https://example.com/file")
+	if err != nil {
+		t.Fatalf("Bytes(custom client) error = %v", err)
+	}
+	if string(got) != "custom" {
+		t.Fatalf("Bytes(custom client) = %q", got)
+	}
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
-func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
-}
-
-type countingBody struct {
-	read int
-}
-
-func (b *countingBody) Read(p []byte) (int, error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
-	p[0] = 'x'
-	b.read++
-	return 1, nil
-}
-
-func (b *countingBody) Close() error {
-	return nil
-}
-
-var _ io.ReadCloser = (*countingBody)(nil)
-
-func TestCopyLimited(t *testing.T) {
-	var dst strings.Builder
-	err := copyLimited(&dst, strings.NewReader("abc"), 3)
-	require.NoError(t, err)
-	assert.Equal(t, "abc", dst.String())
-
-	err = copyLimited(&dst, strings.NewReader("abcd"), 3)
-	assert.ErrorIs(t, err, ErrResponseBodyTooLarge)
-}
-
-func TestGetFile_LinkErrorWrapsUnexpectedFailure(t *testing.T) {
-	err := copyLimited(errWriter{}, strings.NewReader("data"), defaultMaxBytes)
-	assert.Error(t, err)
-}
-
-func TestCheckResponse(t *testing.T) {
-	tests := []struct {
-		name     string
-		status   int
-		length   int64
-		maxBytes int64
-		hasError bool
-	}{
-		{"ok", http.StatusOK, 100, 200, false},
-		{"not ok", http.StatusNotFound, 0, 100, true},
-		{"content too large", http.StatusOK, 200, 100, true},
-		{"no content length", http.StatusOK, -1, 100, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			resp := &http.Response{
-				StatusCode:    tt.status,
-				ContentLength: tt.length,
-			}
-			err := checkResponse(resp, tt.maxBytes)
-			if tt.hasError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestNewConfig(t *testing.T) {
-	cfg := newConfig()
-	assert.NotNil(t, cfg.client)
-	assert.Equal(t, int64(defaultMaxBytes), cfg.maxBytes)
-	assert.False(t, cfg.overwrite)
-}
-
-func TestNewConfig_IgnoresNilOption(t *testing.T) {
-	cfg := newConfig(nil)
-	assert.NotNil(t, cfg.client)
-	assert.Equal(t, int64(defaultMaxBytes), cfg.maxBytes)
-}
-
-func TestNewConfig_DefaultTransportClonesHTTPDefaultTransport(t *testing.T) {
-	cfg := newConfig()
-
-	transport, ok := cfg.client.Transport.(*http.Transport)
-	require.True(t, ok)
-	assert.NotSame(t, http.DefaultTransport, transport)
-	assert.NotNil(t, transport.Proxy)
-	assert.NotNil(t, transport.DialContext)
-	assert.Equal(t, 100, transport.MaxIdleConnsPerHost)
-}
-
-type errWriter struct{}
-
-func (errWriter) Write([]byte) (int, error) {
-	return 0, errors.New("write failed")
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
 }

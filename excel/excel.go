@@ -3,9 +3,8 @@ package excel
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
+	"io"
 	"reflect"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,178 +17,12 @@ const tagKey = "excel"
 var (
 	structCache sync.Map
 
-	errNilCallback   = errors.New("excel: callback is nil")
-	errInvalidTarget = errors.New("excel: invalid target")
-	errInvalidColumn = errors.New("excel: invalid column")
-	errUnexported    = errors.New("excel: field is unexported")
-	errUnsupported   = errors.New("excel: unsupported type")
-	errValueOverflow = errors.New("excel: value overflows target type")
-	errEmptyColumn   = errors.New("excel: column name is empty")
+	ErrInvalidInput = errors.New("excel: invalid input")
+	ErrDecode       = errors.New("excel: decode error")
 )
 
-func IsXLSX(filename string) bool {
-	return strings.EqualFold(filepath.Ext(filename), ".xlsx")
-}
-
-func Read(path string) (data map[string][][]string, err error) {
-	wb, err := Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if closeErr := wb.Close(); err == nil && closeErr != nil {
-			err = fmt.Errorf("close workbook: %w", closeErr)
-		}
-	}()
-	return wb.ReadAll()
-}
-
-func ReadSheet(path, name string) (rows [][]string, err error) {
-	wb, err := Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if closeErr := wb.Close(); err == nil && closeErr != nil {
-			err = fmt.Errorf("close workbook: %w", closeErr)
-		}
-	}()
-	return wb.Sheet(name).Rows()
-}
-
-func Walk(path, name string, fn func(int, []string) error) (err error) {
-	if fn == nil {
-		return errNilCallback
-	}
-
-	wb, err := Open(path)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if closeErr := wb.Close(); err == nil && closeErr != nil {
-			err = fmt.Errorf("close workbook: %w", closeErr)
-		}
-	}()
-	return wb.Sheet(name).Scan(fn)
-}
-
-func ScanRow[T any](path, name string, fn func(int, *T) error) (err error) {
-	if fn == nil {
-		return errNilCallback
-	}
-
-	wb, err := Open(path)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if closeErr := wb.Close(); err == nil && closeErr != nil {
-			err = fmt.Errorf("close workbook: %w", closeErr)
-		}
-	}()
-
-	return wb.Sheet(name).Scan(func(idx int, row []string) error {
-		v, err := Parse[T](row)
-		if err != nil {
-			return nil
-		}
-		return fn(idx, v)
-	})
-}
-
-func ScanAll[T any](path, name string) (result []*T, err error) {
-	wb, err := Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if closeErr := wb.Close(); err == nil && closeErr != nil {
-			err = fmt.Errorf("close workbook: %w", closeErr)
-		}
-	}()
-
-	err = wb.Sheet(name).Scan(func(_ int, row []string) error {
-		v, _ := Parse[T](row)
-		result = append(result, v)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-func Parse[T any](row []string) (*T, error) {
-	info, err := getStructInfo[T]()
-	if err != nil {
-		return nil, err
-	}
-	v := reflect.New(info.typ).Elem()
-
-	for colIdx, f := range info.fields {
-		if colIdx >= len(row) {
-			continue
-		}
-		if err := setField(v.Field(f.index), row[colIdx]); err != nil {
-			return nil, fmt.Errorf("column %s: %w", columnName(colIdx), err)
-		}
-	}
-
-	result := new(T)
-	dst := reflect.ValueOf(result).Elem()
-	if info.ptr {
-		dst.Set(v.Addr())
-		return result, nil
-	}
-	dst.Set(v)
-	return result, nil
-}
-
 type Workbook struct {
-	path string
 	file *excelize.File
-}
-
-func Open(path string) (*Workbook, error) {
-	f, err := excelize.OpenFile(path)
-	if err != nil {
-		return nil, err
-	}
-	return &Workbook{path: path, file: f}, nil
-}
-
-func (w *Workbook) Close() error {
-	if w.file != nil {
-		return w.file.Close()
-	}
-	return nil
-}
-
-func (w *Workbook) Sheets() []string {
-	if w.file == nil {
-		return []string{}
-	}
-	return w.file.GetSheetList()
-}
-
-func (w *Workbook) Sheet(name string) *Sheet {
-	return &Sheet{file: w.file, name: name}
-}
-
-func (w *Workbook) ReadAll() (map[string][][]string, error) {
-	sheets := w.Sheets()
-	result := make(map[string][][]string, len(sheets))
-
-	for _, sheet := range sheets {
-		rows, err := w.Sheet(sheet).Rows()
-		if err != nil {
-			return nil, err
-		}
-		result[sheet] = rows
-	}
-
-	return result, nil
 }
 
 type Sheet struct {
@@ -197,22 +30,103 @@ type Sheet struct {
 	name string
 }
 
-func (s *Sheet) Rows() ([][]string, error) {
-	return s.file.GetRows(s.name)
+func Open(path string) (*Workbook, error) {
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("excel: open file: %w", err)
+	}
+	return &Workbook{file: f}, nil
 }
 
-func (s *Sheet) Scan(fn func(idx int, row []string) error) (err error) {
-	if fn == nil {
-		return errNilCallback
+func OpenReader(r io.Reader) (*Workbook, error) {
+	f, err := excelize.OpenReader(r)
+	if err != nil {
+		return nil, fmt.Errorf("excel: open reader: %w", err)
 	}
+	return &Workbook{file: f}, nil
+}
 
+func Read[T any](path, sheet string) (result []T, err error) {
+	wb, err := Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := wb.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
+	return Decode[T](wb.Sheet(sheet))
+}
+
+func Decode[T any](s *Sheet) ([]T, error) {
+	var out []T
+	if err := s.Scan(func(_ int, row []string) error {
+		v, err := decodeRow[T](row)
+		if err != nil {
+			return err
+		}
+		out = append(out, v)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (w *Workbook) Close() error {
+	if w == nil || w.file == nil {
+		return nil
+	}
+	if err := w.file.Close(); err != nil {
+		return fmt.Errorf("excel: close workbook: %w", err)
+	}
+	return nil
+}
+
+func (w *Workbook) Sheets() []string {
+	if w == nil || w.file == nil {
+		return nil
+	}
+	return w.file.GetSheetList()
+}
+
+func (w *Workbook) Sheet(name string) *Sheet {
+	if w == nil {
+		return &Sheet{name: name}
+	}
+	return &Sheet{file: w.file, name: name}
+}
+
+func (w *Workbook) Rows(sheet string) ([][]string, error) {
+	return w.Sheet(sheet).Rows()
+}
+
+func (s *Sheet) Rows() ([][]string, error) {
+	if s == nil || s.file == nil {
+		return nil, fmt.Errorf("%w: nil sheet", ErrInvalidInput)
+	}
+	rows, err := s.file.GetRows(s.name)
+	if err != nil {
+		return nil, fmt.Errorf("excel: get rows: %w", err)
+	}
+	return rows, nil
+}
+
+func (s *Sheet) Scan(fn func(index int, row []string) error) (err error) {
+	if fn == nil {
+		return ErrInvalidInput
+	}
+	if s == nil || s.file == nil {
+		return fmt.Errorf("%w: nil sheet", ErrInvalidInput)
+	}
 	rows, err := s.file.Rows(s.name)
 	if err != nil {
-		return err
+		return fmt.Errorf("excel: scan rows: %w", err)
 	}
 	defer func() {
 		if closeErr := rows.Close(); err == nil && closeErr != nil {
-			err = fmt.Errorf("close rows: %w", closeErr)
+			err = fmt.Errorf("excel: close rows: %w", closeErr)
 		}
 	}()
 
@@ -220,42 +134,22 @@ func (s *Sheet) Scan(fn func(idx int, row []string) error) (err error) {
 	for rows.Next() {
 		cols, err := rows.Columns()
 		if err != nil {
-			return err
+			return fmt.Errorf("excel: read row: %w", err)
 		}
 		if err := fn(i, cols); err != nil {
 			return err
 		}
 		i++
 	}
-	return rows.Error()
-}
-
-type Row struct {
-	values []string
-	index  int
-}
-
-func (r *Row) Values() []string {
-	return slices.Clone(r.values)
-}
-
-func (r *Row) Index() int {
-	return r.index
-}
-
-func (r *Row) Value(col int) string {
-	if col < 0 || col >= len(r.values) {
-		return ""
+	if err := rows.Error(); err != nil {
+		return fmt.Errorf("excel: scan rows: %w", err)
 	}
-	return r.values[col]
-}
-
-func (r *Row) Len() int {
-	return len(r.values)
+	return nil
 }
 
 type fieldInfo struct {
 	index int
+	typ   reflect.Type
 }
 
 type structInfo struct {
@@ -264,176 +158,151 @@ type structInfo struct {
 	fields map[int]fieldInfo
 }
 
+func decodeRow[T any](row []string) (T, error) {
+	info, err := getStructInfo[T]()
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	v := reflect.New(info.typ).Elem()
+
+	for colIdx, f := range info.fields {
+		if colIdx >= len(row) {
+			continue
+		}
+		if err := setField(v.Field(f.index), row[colIdx]); err != nil {
+			var zero T
+			return zero, fmt.Errorf("%w: column=%s: %w", ErrDecode, columnName(colIdx), err)
+		}
+	}
+
+	var result T
+	dst := reflect.ValueOf(&result).Elem()
+	if info.ptr {
+		dst.Set(v.Addr())
+		return result, nil
+	}
+	dst.Set(v)
+	return result, nil
+}
+
 func getStructInfo[T any]() (structInfo, error) {
-	var t T
-
-	typ := reflect.TypeOf(t)
+	var zero T
+	typ := reflect.TypeOf(zero)
+	ptr := false
 	if typ == nil {
-		return structInfo{}, errInvalidTarget
+		return structInfo{}, fmt.Errorf("%w: nil target", ErrInvalidInput)
 	}
-
-	isPtr := false
-	elem := typ
 	if typ.Kind() == reflect.Pointer {
-		isPtr = true
-		elem = typ.Elem()
+		ptr = true
+		typ = typ.Elem()
 	}
-	if elem.Kind() != reflect.Struct {
-		return structInfo{}, fmt.Errorf("%w: got %v", errInvalidTarget, typ)
-	}
-
-	if info, ok := structCache.Load(typ); ok {
-		return info.(structInfo), nil
+	if typ.Kind() != reflect.Struct {
+		return structInfo{}, fmt.Errorf("%w: target must be struct", ErrInvalidInput)
 	}
 
-	fields, err := buildFieldIndex(elem)
+	if cached, ok := structCache.Load(typ); ok {
+		info := cached.(structInfo)
+		info.ptr = ptr
+		return info, nil
+	}
+
+	fields, err := buildFieldIndex(typ)
 	if err != nil {
 		return structInfo{}, err
 	}
-
-	info := structInfo{
-		typ:    elem,
-		ptr:    isPtr,
-		fields: fields,
-	}
+	info := structInfo{typ: typ, fields: fields}
 	structCache.Store(typ, info)
+	info.ptr = ptr
 	return info, nil
 }
 
 func buildFieldIndex(typ reflect.Type) (map[int]fieldInfo, error) {
-	index := make(map[int]fieldInfo)
-
-	for i := 0; i < typ.NumField(); i++ {
+	fields := make(map[int]fieldInfo)
+	for i := range typ.NumField() {
 		field := typ.Field(i)
-
 		tag := field.Tag.Get(tagKey)
 		if tag == "" || tag == "-" {
 			continue
 		}
-
+		if field.PkgPath != "" {
+			return nil, fmt.Errorf("%w: field=%s", ErrInvalidInput, field.Name)
+		}
 		col, err := columnIndex(tag)
 		if err != nil {
-			return nil, fmt.Errorf("field %s: %w", field.Name, err)
+			return nil, err
 		}
-		if field.PkgPath != "" {
-			return nil, fmt.Errorf("field %s: %w", field.Name, errUnexported)
-		}
-
-		index[col] = fieldInfo{index: i}
+		fields[col] = fieldInfo{index: i, typ: field.Type}
 	}
-
-	return index, nil
+	return fields, nil
 }
 
 func columnIndex(col string) (int, error) {
-	col = strings.ToUpper(col)
-
+	col = strings.TrimSpace(strings.ToUpper(col))
 	if col == "" {
-		return 0, errEmptyColumn
+		return 0, fmt.Errorf("%w: empty column", ErrInvalidInput)
 	}
-
 	n := 0
-	for _, c := range col {
-		if c < 'A' || c > 'Z' {
-			return 0, fmt.Errorf("%w: %q", errInvalidColumn, col)
+	for _, r := range col {
+		if r < 'A' || r > 'Z' {
+			return 0, fmt.Errorf("%w: column=%q", ErrInvalidInput, col)
 		}
-		n = n*26 + int(c-'A'+1)
+		n = n*26 + int(r-'A'+1)
 	}
-
 	return n - 1, nil
 }
 
 func columnName(n int) string {
-	if n < 0 {
-		return ""
+	n++
+	var b []byte
+	for n > 0 {
+		n--
+		b = append([]byte{byte('A' + n%26)}, b...)
+		n /= 26
 	}
-
-	var s string
-	for n >= 0 {
-		s = string(rune('A'+n%26)) + s
-		n = n/26 - 1
-		if n < 0 {
-			break
-		}
-	}
-
-	return s
+	return string(b)
 }
 
 func setField(v reflect.Value, s string) error {
 	if !v.CanSet() {
+		return fmt.Errorf("%w: unsettable field", ErrInvalidInput)
+	}
+	if s == "" {
 		return nil
 	}
-
-	if v.Kind() == reflect.Pointer {
-		if s == "" {
-			v.Set(reflect.Zero(v.Type()))
-			return nil
-		}
-
-		ptr := reflect.New(v.Type().Elem())
-
-		if err := parseValue(ptr.Elem(), s); err != nil {
-			return err
-		}
-
-		v.Set(ptr)
-		return nil
-	}
-
 	return parseValue(v, s)
 }
 
 func parseValue(v reflect.Value, s string) error {
-	if s == "" {
-		v.Set(reflect.Zero(v.Type()))
-		return nil
-	}
-
 	switch v.Kind() {
 	case reflect.String:
 		v.SetString(s)
-
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		n, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			return fmt.Errorf("parse int %q: %w", s, err)
-		}
-		if v.OverflowInt(n) {
-			return fmt.Errorf("parse int %q: %w: %v", s, errValueOverflow, v.Type())
-		}
-		v.SetInt(n)
-
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		n, err := strconv.ParseUint(s, 10, 64)
-		if err != nil {
-			return fmt.Errorf("parse uint %q: %w", s, err)
-		}
-		if v.OverflowUint(n) {
-			return fmt.Errorf("parse uint %q: %w: %v", s, errValueOverflow, v.Type())
-		}
-		v.SetUint(n)
-
-	case reflect.Float32, reflect.Float64:
-		n, err := strconv.ParseFloat(s, 64)
-		if err != nil {
-			return fmt.Errorf("parse float %q: %w", s, err)
-		}
-		if v.OverflowFloat(n) {
-			return fmt.Errorf("parse float %q: %w: %v", s, errValueOverflow, v.Type())
-		}
-		v.SetFloat(n)
-
 	case reflect.Bool:
-		n, err := strconv.ParseBool(s)
+		b, err := strconv.ParseBool(s)
 		if err != nil {
-			return fmt.Errorf("parse bool %q: %w", s, err)
+			return err
 		}
-		v.SetBool(n)
-
+		v.SetBool(b)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		i, err := strconv.ParseInt(s, 10, v.Type().Bits())
+		if err != nil {
+			return err
+		}
+		v.SetInt(i)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		u, err := strconv.ParseUint(s, 10, v.Type().Bits())
+		if err != nil {
+			return err
+		}
+		v.SetUint(u)
+	case reflect.Float32, reflect.Float64:
+		f, err := strconv.ParseFloat(s, v.Type().Bits())
+		if err != nil {
+			return err
+		}
+		v.SetFloat(f)
 	default:
-		return fmt.Errorf("%w: %v", errUnsupported, v.Type())
+		return fmt.Errorf("%w: type=%s", ErrInvalidInput, v.Type())
 	}
-
 	return nil
 }

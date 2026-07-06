@@ -4,780 +4,314 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
-	"sync"
 )
 
-type item[T any, K comparable] struct {
-	data        T
-	parentKey   K
-	hasParent   bool
-	insertOrder int
-}
-
 type Builder[T any, K comparable] struct {
-	mu    sync.RWMutex
-	items []*item[T, K]
-
-	insertCtr int
-
-	keyFn     func(T) K
-	parentFn  func(T) (K, bool)
-	sortFn    func(T) int
-	sortCmpFn func(T, T) int
-
-	dirty  bool
-	cached *Tree[T, K]
+	items    []builderItem[T, K]
+	keyFn    func(T) K
+	parentFn func(T) (K, bool)
+	sortFn   func(a, b T) int
+	ops      []operation[T, K]
 }
 
 func NewBuilder[T any, K comparable]() *Builder[T, K] {
-	return &Builder[T, K]{dirty: true}
-}
-
-func (b *Builder[T, K]) AddItem(v T) *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	b.items = append(b.items, &item[T, K]{
-		data:        v,
-		insertOrder: b.insertCtr,
-	})
-	b.insertCtr++
-	b.invalidate()
-	return b
-}
-
-func (b *Builder[T, K]) AddItemWithParent(v T, parentKey K) *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	b.items = append(b.items, &item[T, K]{
-		data:        v,
-		parentKey:   parentKey,
-		hasParent:   true,
-		insertOrder: b.insertCtr,
-	})
-	b.insertCtr++
-	b.invalidate()
-	return b
-}
-
-func (b *Builder[T, K]) WithItems(items []T) *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for _, v := range items {
-		b.items = append(b.items, &item[T, K]{data: v, insertOrder: b.insertCtr})
-		b.insertCtr++
-	}
-	b.invalidate()
-	return b
+	return &Builder[T, K]{}
 }
 
 func (b *Builder[T, K]) KeyBy(fn func(T) K) *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
 	b.keyFn = fn
-	b.invalidate()
 	return b
 }
 
 func (b *Builder[T, K]) ParentBy(fn func(T) (K, bool)) *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
 	b.parentFn = fn
-	b.invalidate()
 	return b
 }
 
-func (b *Builder[T, K]) SortBy(fn func(T) int) *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+func (b *Builder[T, K]) SortFunc(fn func(a, b T) int) *Builder[T, K] {
 	b.sortFn = fn
-	b.sortCmpFn = nil
-	b.invalidate()
 	return b
 }
 
-func (b *Builder[T, K]) SortByFunc(fn func(T, T) int) *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.sortCmpFn = fn
-	b.sortFn = nil
-	b.invalidate()
+func (b *Builder[T, K]) Add(items ...T) *Builder[T, K] {
+	for _, v := range items {
+		b.items = append(b.items, builderItem[T, K]{value: v, insert: len(b.items)})
+	}
 	return b
 }
 
-func (b *Builder[T, K]) invalidate() {
-	b.dirty = true
-	b.cached = nil
+func (b *Builder[T, K]) Update(key K, fn func(*T)) *Builder[T, K] {
+	b.ops = append(b.ops, updateOperation(key, fn))
+	return b
 }
 
-func (b *Builder[T, K]) Build() (*Tree[T, K], error) {
-	return b.ensureTree()
+func (b *Builder[T, K]) Remove(key K) *Builder[T, K] {
+	b.ops = append(b.ops, removeOperation[T](key))
+	return b
 }
 
-func (b *Builder[T, K]) Clone() *Builder[T, K] {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	items := make([]*item[T, K], len(b.items))
-	for i, n := range b.items {
-		items[i] = &item[T, K]{
-			data:        n.data,
-			parentKey:   n.parentKey,
-			hasParent:   n.hasParent,
-			insertOrder: n.insertOrder,
-		}
-	}
-
-	return &Builder[T, K]{
-		items:     items,
-		insertCtr: b.insertCtr,
-		keyFn:     b.keyFn,
-		parentFn:  b.parentFn,
-		sortFn:    b.sortFn,
-		sortCmpFn: b.sortCmpFn,
-		dirty:     true,
-	}
-}
-
-func (b *Builder[T, K]) Statistics() (Stats, error) {
-	tree, err := b.Build()
-	if err != nil {
-		return Stats{}, err
-	}
-	return tree.Stats(), nil
+func (b *Builder[T, K]) Move(key, parent K) *Builder[T, K] {
+	b.ops = append(b.ops, moveOperation[T](key, parent))
+	return b
 }
 
 func (b *Builder[T, K]) Validate() []error {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	if b.keyFn == nil {
-		return []error{ErrKeyNotSet}
+	_, err := b.build()
+	if err == nil {
+		return nil
 	}
-
-	var errs []error
-
-	count := len(b.items)
-	keys := make([]K, count)
-	keyIndex := make(map[K]int, count)
-	parentKeys := make([]K, count)
-	hasParents := make([]bool, count)
-
-	for i, n := range b.items {
-		k := b.keyFn(n.data)
-		keys[i] = k
-
-		if _, ok := keyIndex[k]; ok {
-			errs = append(errs, fmt.Errorf("%w: %v", ErrDuplicateKey, k))
-		}
-		keyIndex[k] = i
-
-		pk, has := b.resolveParent(n, k)
-		parentKeys[i] = pk
-		hasParents[i] = has
-	}
-
-	for i, k := range keys {
-		if hasParents[i] {
-			if _, ok := keyIndex[parentKeys[i]]; !ok {
-				errs = append(errs, fmt.Errorf("%w: %v", ErrOrphanedNode, k))
-			}
-		}
-	}
-
-	if cycleKey, found := detectCycle(keys, parentKeys, hasParents, keyIndex); found {
-		errs = append(errs, fmt.Errorf("%w: %v", ErrCycle, cycleKey))
-	}
-
-	return errs
+	return []error{err}
 }
 
-func (b *Builder[T, K]) Filter(fn func(T) bool) (*Builder[T, K], error) {
-	if fn == nil {
-		return nil, ErrNilCallback
-	}
-
-	b.mu.Lock()
-
-	filtered := make([]*item[T, K], 0, len(b.items))
-	for _, n := range b.items {
-		if fn(n.data) {
-			cp := *n
-			filtered = append(filtered, &cp)
-		}
-	}
-
-	clone := &Builder[T, K]{
-		items:     filtered,
-		insertCtr: b.insertCtr,
-		keyFn:     b.keyFn,
-		parentFn:  b.parentFn,
-		sortFn:    b.sortFn,
-		sortCmpFn: b.sortCmpFn,
-		dirty:     true,
-	}
-	return clone, nil
+func (b *Builder[T, K]) Build() (*Tree[T, K], error) {
+	return b.build()
 }
 
-func (b *Builder[T, K]) Map(fn func(T) T, keyFn func(T) K) (*Builder[T, K], error) {
-	if fn == nil || keyFn == nil {
-		return nil, ErrNilCallback
-	}
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	mapped := make([]*item[T, K], len(b.items))
-	for i, n := range b.items {
-		mapped[i] = &item[T, K]{
-			data:        fn(n.data),
-			parentKey:   n.parentKey,
-			hasParent:   n.hasParent,
-			insertOrder: n.insertOrder,
-		}
-	}
-
+func (b *Builder[T, K]) Clone() *Builder[T, K] {
 	return &Builder[T, K]{
-		items:     mapped,
-		insertCtr: b.insertCtr,
-		keyFn:     keyFn,
-		parentFn:  b.parentFn,
-		sortFn:    b.sortFn,
-		sortCmpFn: b.sortCmpFn,
-		dirty:     true,
-	}, nil
-}
-
-func (b *Builder[T, K]) Transform(fn func(*T)) error {
-	if fn == nil {
-		return ErrNilCallback
-	}
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for _, n := range b.items {
-		fn(&n.data)
-	}
-	b.invalidate()
-	return nil
-}
-
-func (b *Builder[T, K]) Find(fn func(T) bool) (*Node[T], error) {
-	if fn == nil {
-		return nil, ErrNilCallback
-	}
-
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	for _, n := range b.items {
-		if fn(n.data) {
-			return &Node[T]{Item: n.data}, nil
-		}
-	}
-	return nil, ErrItemNotFound
-}
-
-func (b *Builder[T, K]) ContainsKey(key K) (bool, error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	if b.keyFn == nil {
-		return false, ErrKeyNotSet
-	}
-
-	for _, n := range b.items {
-		if b.keyFn(n.data) == key {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func (b *Builder[T, K]) ContainsItem(fn func(T) bool) (bool, error) {
-	if fn == nil {
-		return false, ErrNilCallback
-	}
-
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	for _, n := range b.items {
-		if fn(n.data) {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func (b *Builder[T, K]) UpdateItem(key K, fn func(*T)) error {
-	if fn == nil {
-		return ErrNilCallback
-	}
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if b.keyFn == nil {
-		return ErrKeyNotSet
-	}
-
-	idx := -1
-	for i, n := range b.items {
-		if b.keyFn(n.data) == key {
-			idx = i
-			break
-		}
-	}
-
-	if idx == -1 {
-		return fmt.Errorf("%w: %v", ErrKeyNotFound, key)
-	}
-
-	oldItem := b.items[idx].data
-	fn(&b.items[idx].data)
-	newKey := b.keyFn(b.items[idx].data)
-
-	if newKey != key {
-		for i, n := range b.items {
-			if i != idx && b.keyFn(n.data) == newKey {
-				b.items[idx].data = oldItem
-				return fmt.Errorf("%w: %v", ErrDuplicateKey, newKey)
-			}
-		}
-	}
-
-	b.invalidate()
-	return nil
-}
-
-func (b *Builder[T, K]) ChildrenOf(key K) ([]*Node[T], error) {
-	tree, err := b.ensureTree()
-	if err != nil {
-		return nil, err
-	}
-
-	parentNode, ok := tree.cache[key]
-	if !ok {
-		return nil, fmt.Errorf("%w: %v", ErrKeyNotFound, key)
-	}
-
-	result := make([]*Node[T], len(parentNode.Children))
-	for i, c := range parentNode.Children {
-		result[i] = cloneNode(c)
-	}
-	return result, nil
-}
-
-func (b *Builder[T, K]) Depth(key K) (int, error) {
-	tree, err := b.ensureTree()
-	if err != nil {
-		return 0, err
-	}
-
-	node, ok := tree.cache[key]
-	if !ok {
-		return 0, fmt.Errorf("%w: %v", ErrKeyNotFound, key)
-	}
-
-	return node.Level, nil
-}
-
-func (b *Builder[T, K]) IsDescendant(ancestor, key K) (bool, error) {
-	tree, err := b.ensureTree()
-	if err != nil {
-		return false, err
-	}
-
-	if _, ok := tree.cache[key]; !ok {
-		return false, fmt.Errorf("%w: %v", ErrKeyNotFound, key)
-	}
-	if _, ok := tree.cache[ancestor]; !ok {
-		return false, fmt.Errorf("ancestor: %w: %v", ErrKeyNotFound, ancestor)
-	}
-
-	if key == ancestor {
-		return true, nil
-	}
-
-	cur := key
-	for {
-		pk, ok := tree.parentIdx[cur]
-		if !ok {
-			return false, nil
-		}
-		if pk == ancestor {
-			return true, nil
-		}
-		cur = pk
+		items:    append([]builderItem[T, K](nil), b.items...),
+		keyFn:    b.keyFn,
+		parentFn: b.parentFn,
+		sortFn:   b.sortFn,
+		ops:      append([]operation[T, K](nil), b.ops...),
 	}
 }
 
-func (b *Builder[T, K]) RemoveItem(key K) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if b.keyFn == nil {
-		return ErrKeyNotSet
-	}
-
-	allKeys := make(map[K]struct{}, len(b.items))
-	childIdx := make(map[K][]K, len(b.items))
-	for _, n := range b.items {
-		k := b.keyFn(n.data)
-		allKeys[k] = struct{}{}
-		pk, has := b.resolveParent(n, k)
-		if has {
-			childIdx[pk] = append(childIdx[pk], k)
-		}
-	}
-
-	if _, ok := allKeys[key]; !ok {
-		return fmt.Errorf("%w: %v", ErrKeyNotFound, key)
-	}
-
-	keysToRemove := make(map[K]struct{})
-	stack := []K{key}
-	for len(stack) > 0 {
-		k := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		if _, seen := keysToRemove[k]; seen {
-			continue
-		}
-		keysToRemove[k] = struct{}{}
-		stack = append(stack, childIdx[k]...)
-	}
-
-	remaining := b.items[:0:0]
-	for _, n := range b.items {
-		if _, drop := keysToRemove[b.keyFn(n.data)]; !drop {
-			remaining = append(remaining, n)
-		}
-	}
-
-	b.items = remaining
-	b.invalidate()
-	return nil
-}
-
-func (b *Builder[T, K]) MoveItem(key, newParent K) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if b.keyFn == nil {
-		return ErrKeyNotSet
-	}
-
-	if key == newParent {
-		return fmt.Errorf("%w: self move", ErrInvalidMove)
-	}
-
-	keyIndex := make(map[K]int, len(b.items))
-	for i, n := range b.items {
-		k := b.keyFn(n.data)
-		keyIndex[k] = i
-	}
-
-	if _, ok := keyIndex[key]; !ok {
-		return fmt.Errorf("%w: %v", ErrKeyNotFound, key)
-	}
-	if _, ok := keyIndex[newParent]; !ok {
-		return fmt.Errorf("parent: %w: %v", ErrKeyNotFound, newParent)
-	}
-
-	ancestors := make(map[K]bool)
-	cur := newParent
-	for {
-		ancestors[cur] = true
-		idx, ok := keyIndex[cur]
-		if !ok {
-			break
-		}
-		n := b.items[idx]
-		pk, has := b.resolveParent(n, b.keyFn(n.data))
-		if !has {
-			break
-		}
-		cur = pk
-	}
-
-	if ancestors[key] {
-		return fmt.Errorf("%w: %v", ErrCycle, key)
-	}
-
-	for _, n := range b.items {
-		if b.keyFn(n.data) == key {
-			n.parentKey = newParent
-			n.hasParent = true
-			break
-		}
-	}
-
-	b.invalidate()
-	return nil
-}
-
-func (b *Builder[T, K]) Subtree(key K) (*Tree[T, K], error) {
-	tree, err := b.ensureTree()
-	if err != nil {
-		return nil, err
-	}
-
-	subtree, ok := tree.Subtree(key)
-	if !ok {
-		return nil, fmt.Errorf("%w: %v", ErrKeyNotFound, key)
-	}
-	return subtree, nil
-}
-
-func (b *Builder[T, K]) resolveParent(n *item[T, K], selfKey K) (K, bool) {
-	if n.hasParent {
-		if n.parentKey == selfKey {
-			var zero K
-			return zero, false
-		}
-		return n.parentKey, true
-	}
-	if b.parentFn != nil {
-		pk, ok := b.parentFn(n.data)
-		if ok && pk == selfKey {
-			var zero K
-			return zero, false
-		}
-		return pk, ok
-	}
-	return n.parentKey, n.hasParent
-}
-
-func (b *Builder[T, K]) ensureTree() (*Tree[T, K], error) {
-	b.mu.RLock()
-	if !b.dirty && b.cached != nil {
-		t := b.cached
-		b.mu.RUnlock()
-		return t, nil
-	}
-	b.mu.RUnlock()
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
+func (b *Builder[T, K]) build() (*Tree[T, K], error) {
 	if b.keyFn == nil {
 		return nil, ErrKeyNotSet
 	}
 
-	if !b.dirty && b.cached != nil {
-		return b.cached, nil
-	}
-
-	t, err := b.buildTree()
-	if err != nil {
-		return nil, err
-	}
-
-	b.cached = t
-	b.dirty = false
-	return t, nil
-}
-
-func (b *Builder[T, K]) buildTree() (*Tree[T, K], error) {
-	if b.keyFn == nil {
-		return nil, ErrKeyNotSet
-	}
-
-	count := len(b.items)
-
-	keys := make([]K, count)
-	keyIndex := make(map[K]int, count)
-
-	for i, n := range b.items {
-		k := b.keyFn(n.data)
-		if _, ok := keyIndex[k]; ok {
-			return nil, fmt.Errorf("%w: %v", ErrDuplicateKey, k)
-		}
-		keys[i] = k
-		keyIndex[k] = i
-	}
-
-	parentKeys := make([]K, count)
-	hasParents := make([]bool, count)
-	sortVals := make([]int, count)
-
-	for i, n := range b.items {
-		pk, has := b.resolveParent(n, keys[i])
-		parentKeys[i] = pk
-		hasParents[i] = has
-
-		if b.sortCmpFn == nil {
-			sortVals[i] = n.insertOrder
-			if b.sortFn != nil {
-				sortVals[i] = b.sortFn(n.data)
-			}
-		}
-	}
-
-	if err := validateTree(keys, parentKeys, hasParents, keyIndex); err != nil {
-		return nil, err
-	}
-
-	cache := make(map[K]*Node[T], count)
-	nodes := make([]*Node[T], count)
-	nodeSort := make(map[*Node[T]]int, count)
-
-	for i, n := range b.items {
-		out := &Node[T]{Item: n.data}
-		nodes[i] = out
-		cache[keys[i]] = out
-		nodeSort[out] = sortVals[i]
-	}
-
-	parentIdx := make(map[K]K, count)
-	var roots []*Node[T]
-
-	for i := range b.items {
-		out := nodes[i]
-
-		if !hasParents[i] {
-			roots = append(roots, out)
+	items := append([]builderItem[T, K](nil), b.items...)
+	for i := range items {
+		if items[i].hasParent || b.parentFn == nil {
 			continue
 		}
-
-		pk := parentKeys[i]
-		parentIdx[keys[i]] = pk
-		cache[pk].Children = append(cache[pk].Children, out)
+		parent, ok := b.parentFn(items[i].value)
+		items[i].parent = parent
+		items[i].hasParent = ok
 	}
 
-	if b.sortCmpFn != nil {
-		sortForestWithCmp(roots, b.sortCmpFn)
-	} else {
-		sortForest(roots, nodeSort)
-	}
-	assignLevels(roots, 1)
-
-	return &Tree[T, K]{
-		roots:     roots,
-		cache:     cache,
-		parentIdx: parentIdx,
-		keyFn:     b.keyFn,
-	}, nil
-}
-
-func assignLevels[T any](nodes []*Node[T], level int) {
-	for _, n := range nodes {
-		n.Level = level
-		if len(n.Children) > 0 {
-			assignLevels(n.Children, level+1)
+	state := builderState[T, K]{items: items, keyFn: b.keyFn}
+	for _, op := range b.ops {
+		if err := op(&state); err != nil {
+			return nil, err
 		}
 	}
+	return buildTree(state.items, b.keyFn, b.sortFn)
 }
 
-func validateTree[K comparable](
-	keys []K,
-	parentKeys []K,
-	hasParents []bool,
-	keyIndex map[K]int,
-) error {
-	for i, k := range keys {
-		if hasParents[i] {
-			if _, ok := keyIndex[parentKeys[i]]; !ok {
-				return fmt.Errorf("%w: %v", ErrOrphanedNode, k)
+type builderItem[T any, K comparable] struct {
+	value      T
+	parent     K
+	hasParent  bool
+	insert     int
+	hasDeleted bool
+}
+
+type operation[T any, K comparable] func(*builderState[T, K]) error
+
+type builderState[T any, K comparable] struct {
+	items []builderItem[T, K]
+	keyFn func(T) K
+}
+
+func updateOperation[T any, K comparable](key K, fn func(*T)) operation[T, K] {
+	return func(state *builderState[T, K]) error {
+		if fn == nil {
+			return fmt.Errorf("%w: nil update function", ErrInvalidInput)
+		}
+		idx := state.index(key)
+		if idx < 0 {
+			return fmt.Errorf("%w: key=%v", ErrKeyNotFound, key)
+		}
+		fn(&state.items[idx].value)
+		return nil
+	}
+}
+
+func removeOperation[T any, K comparable](key K) operation[T, K] {
+	return func(state *builderState[T, K]) error {
+		if state.index(key) < 0 {
+			return fmt.Errorf("%w: key=%v", ErrKeyNotFound, key)
+		}
+
+		children := state.childIndex()
+		toRemove := make(map[K]struct{})
+		stack := append([]K(nil), children[key]...)
+		for len(stack) > 0 {
+			k := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			if _, ok := toRemove[k]; ok {
+				continue
+			}
+			toRemove[k] = struct{}{}
+			stack = append(stack, children[k]...)
+		}
+		toRemove[key] = struct{}{}
+		for i := range state.items {
+			if _, ok := toRemove[state.keyFn(state.items[i].value)]; ok {
+				state.items[i].hasDeleted = true
 			}
 		}
+		return nil
 	}
-
-	if cycleKey, found := detectCycle(keys, parentKeys, hasParents, keyIndex); found {
-		return fmt.Errorf("%w: %v", ErrCycle, cycleKey)
-	}
-
-	return nil
 }
 
-func detectCycle[K comparable](
-	keys []K,
-	parentKeys []K,
-	hasParents []bool,
-	keyIndex map[K]int,
-) (K, bool) {
-	type color uint8
-	const (
-		colorWhite color = iota
-		colorGray
-		colorBlack
-	)
+func moveOperation[T any, K comparable](key, parent K) operation[T, K] {
+	return func(state *builderState[T, K]) error {
+		idx := state.index(key)
+		if idx < 0 {
+			return fmt.Errorf("%w: key=%v", ErrKeyNotFound, key)
+		}
+		if key == parent {
+			return fmt.Errorf("%w: key=%v parent=%v", ErrCycle, key, parent)
+		}
+		if state.index(parent) < 0 {
+			return fmt.Errorf("%w: parent=%v", ErrMissingParent, parent)
+		}
+		state.items[idx].parent = parent
+		state.items[idx].hasParent = true
+		return nil
+	}
+}
 
-	colors := make(map[K]color, len(keys))
-
-	for _, start := range keys {
-		if colors[start] != colorWhite {
+func (s *builderState[T, K]) index(key K) int {
+	for i, item := range s.items {
+		if item.hasDeleted {
 			continue
 		}
+		if s.keyFn(item.value) == key {
+			return i
+		}
+	}
+	return -1
+}
 
-		cur := start
-		var visited []K
-		for colors[cur] == colorWhite {
-			colors[cur] = colorGray
-			visited = append(visited, cur)
+func (s *builderState[T, K]) childIndex() map[K][]K {
+	out := make(map[K][]K)
+	for _, item := range s.items {
+		if item.hasDeleted || !item.hasParent {
+			continue
+		}
+		out[item.parent] = append(out[item.parent], s.keyFn(item.value))
+	}
+	return out
+}
 
-			idx, ok := keyIndex[cur]
-			if !ok || !hasParents[idx] {
-				break
-			}
+func buildTree[T any, K comparable](
+	items []builderItem[T, K],
+	keyFn func(T) K,
+	sortFn func(a, b T) int,
+) (*Tree[T, K], error) {
+	nodes := make(map[K]Node[T, K], len(items))
+	order := make(map[K]int, len(items))
+	parentBy := make(map[K]K, len(items))
+	hasParent := make(map[K]bool, len(items))
+	childrenBy := make(map[K][]K, len(items))
+	var live []builderItem[T, K]
 
-			if colors[parentKeys[idx]] == colorGray {
-				return parentKeys[idx], true
-			}
-			cur = parentKeys[idx]
+	for _, item := range items {
+		if item.hasDeleted {
+			continue
+		}
+		key := keyFn(item.value)
+		if _, ok := nodes[key]; ok {
+			return nil, fmt.Errorf("%w: key=%v", ErrDuplicateKey, key)
 		}
 
-		for _, k := range visited {
-			colors[k] = colorBlack
+		nodes[key] = Node[T, K]{
+			Key:    key,
+			Parent: cloneParent(item.parent, item.hasParent),
+			Value:  item.value,
+		}
+		order[key] = item.insert
+		live = append(live, item)
+
+		if item.hasParent {
+			parentBy[key] = item.parent
+			hasParent[key] = true
+			childrenBy[item.parent] = append(childrenBy[item.parent], key)
 		}
 	}
 
+	for key, parent := range parentBy {
+		if parent == key {
+			return nil, fmt.Errorf("%w: key=%v parent=%v", ErrCycle, key, parent)
+		}
+		if _, ok := nodes[parent]; !ok {
+			return nil, fmt.Errorf("%w: parent=%v", ErrMissingParent, parent)
+		}
+		if cycleKey, ok := detectCycleFrom(key, parentBy, hasParent); ok {
+			return nil, fmt.Errorf("%w: key=%v", ErrCycle, cycleKey)
+		}
+	}
+
+	var buildNode func(K) Node[T, K]
+	buildNode = func(key K) Node[T, K] {
+		node := nodes[key]
+		for _, childKey := range childrenBy[key] {
+			node.Children = append(node.Children, buildNode(childKey))
+		}
+		return node
+	}
+
+	var roots []Node[T, K]
+	for _, item := range live {
+		key := keyFn(item.value)
+		if !item.hasParent {
+			roots = append(roots, buildNode(key))
+		}
+	}
+
+	sortNodes(roots, order, sortFn)
+	assignDepth(roots, 0)
+	return newTree(roots), nil
+}
+
+func cloneParent[K comparable](parent K, ok bool) *K {
+	if !ok {
+		return nil
+	}
+	p := parent
+	return &p
+}
+
+func sortNodes[T any, K comparable](nodes []Node[T, K], order map[K]int, sortFn func(a, b T) int) {
+	slices.SortStableFunc(nodes, func(a, b Node[T, K]) int {
+		if sortFn != nil {
+			if c := sortFn(a.Value, b.Value); c != 0 {
+				return c
+			}
+		}
+		return cmp.Compare(order[a.Key], order[b.Key])
+	})
+	for i := range nodes {
+		sortNodes(nodes[i].Children, order, sortFn)
+	}
+}
+
+func assignDepth[T any, K comparable](nodes []Node[T, K], depth int) {
+	for i := range nodes {
+		nodes[i].Depth = depth
+		for j := range nodes[i].Children {
+			parent := nodes[i].Key
+			nodes[i].Children[j].Parent = &parent
+		}
+		assignDepth(nodes[i].Children, depth+1)
+	}
+}
+
+func detectCycleFrom[K comparable](key K, parentBy map[K]K, hasParent map[K]bool) (K, bool) {
 	var zero K
+	seen := make(map[K]bool)
+	cur := key
+	for hasParent[cur] {
+		if seen[cur] {
+			return cur, true
+		}
+		seen[cur] = true
+		cur = parentBy[cur]
+	}
 	return zero, false
-}
-
-func sortForest[T any](roots []*Node[T], sortVals map[*Node[T]]int) {
-	type frame struct{ nodes []*Node[T] }
-	stack := []frame{{roots}}
-
-	for len(stack) > 0 {
-		f := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-
-		if len(f.nodes) > 1 {
-			slices.SortStableFunc(f.nodes, func(a, b *Node[T]) int {
-				return cmp.Compare(sortVals[a], sortVals[b])
-			})
-		}
-
-		for _, n := range f.nodes {
-			if len(n.Children) > 0 {
-				stack = append(stack, frame{n.Children})
-			}
-		}
-	}
-}
-
-func sortForestWithCmp[T any](roots []*Node[T], cmpFn func(T, T) int) {
-	type frame struct{ nodes []*Node[T] }
-	stack := []frame{{roots}}
-
-	for len(stack) > 0 {
-		f := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-
-		if len(f.nodes) > 1 {
-			slices.SortStableFunc(f.nodes, func(a, b *Node[T]) int {
-				return cmpFn(a.Item, b.Item)
-			})
-		}
-
-		for _, n := range f.nodes {
-			if len(n.Children) > 0 {
-				stack = append(stack, frame{n.Children})
-			}
-		}
-	}
 }

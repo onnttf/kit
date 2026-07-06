@@ -1,6 +1,7 @@
 package download
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,291 +14,244 @@ import (
 	"time"
 )
 
-const (
-	defaultMaxBytes = 100 << 20
-)
+const defaultMaxBytes = 100 << 20
 
 var (
-	ErrEmptyURL = errors.New("download: url is empty")
-
-	ErrEmptyName = errors.New("download: file name is empty")
-
-	ErrFileExists = errors.New("download: file exists")
-
-	ErrInvalidScheme = errors.New("download: invalid scheme")
-
-	ErrEmptyHost = errors.New("download: host is empty")
-
-	ErrUnexpectedStatus = errors.New("download: unexpected http status")
-
-	ErrResponseBodyTooLarge = errors.New("download: body too large")
+	ErrInvalidURL       = errors.New("download: invalid url")
+	ErrInvalidPath      = errors.New("download: invalid path")
+	ErrUnexpectedStatus = errors.New("download: unexpected status")
+	ErrTooLarge         = errors.New("download: too large")
+	ErrExists           = errors.New("download: file exists")
 )
 
-var getDefaultClient = sync.OnceValue(func() *http.Client {
+type Client struct {
+	httpClient *http.Client
+	maxBytes   int64
+	headers    http.Header
+	overwrite  bool
+}
+
+type Option func(*Client)
+
+var defaultHTTPClient = sync.OnceValue(func() *http.Client {
 	return &http.Client{
 		Timeout:   30 * time.Second,
 		Transport: defaultTransport(),
 	}
 })
 
-type config struct {
-	client    *http.Client
-	maxBytes  int64
-	overwrite bool
+func New(opts ...Option) *Client {
+	base := *defaultHTTPClient()
+	c := &Client{
+		httpClient: &base,
+		maxBytes:   defaultMaxBytes,
+		headers:    make(http.Header),
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(c)
+		}
+	}
+	return c
 }
 
-type Option func(*config)
-
-func WithClient(client *http.Client) Option {
-	return func(c *config) {
-		if client != nil {
-			c.client = client
+func WithHTTPClient(httpClient *http.Client) Option {
+	return func(c *Client) {
+		if httpClient != nil {
+			c.httpClient = httpClient
 		}
 	}
 }
 
+func WithTimeout(d time.Duration) Option {
+	return func(c *Client) {
+		if d <= 0 {
+			return
+		}
+		client := *c.httpClient
+		client.Timeout = d
+		c.httpClient = &client
+	}
+}
+
 func WithMaxBytes(n int64) Option {
-	return func(c *config) {
+	return func(c *Client) {
 		if n > 0 {
 			c.maxBytes = n
 		}
 	}
 }
 
-func WithOverwrite() Option {
-	return func(c *config) {
-		c.overwrite = true
+func WithHeader(key, value string) Option {
+	return func(c *Client) {
+		if key != "" {
+			c.headers.Set(key, value)
+		}
 	}
 }
 
-func WithTimeout(d time.Duration) Option {
-	return func(c *config) {
-		if d <= 0 {
-			return
-		}
-		client := *c.client
-		client.Timeout = d
-		c.client = &client
+func WithOverwrite(v bool) Option {
+	return func(c *Client) {
+		c.overwrite = v
 	}
 }
 
-func GetFile(ctx context.Context, rawURL, name string, opts ...Option) (err error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+func Bytes(ctx context.Context, rawURL string, opts ...Option) ([]byte, error) {
+	return New(opts...).Bytes(ctx, rawURL)
+}
 
-	cfg := newConfig(opts...)
+func File(ctx context.Context, rawURL, path string, opts ...Option) error {
+	return New(opts...).File(ctx, rawURL, path)
+}
 
-	if rawURL == "" {
-		return ErrEmptyURL
+func (c *Client) Bytes(ctx context.Context, rawURL string) ([]byte, error) {
+	resp, err := c.open(ctx, rawURL)
+	if err != nil {
+		return nil, err
 	}
-	if name == "" {
-		return ErrEmptyName
-	}
-	if err := validateURL(rawURL); err != nil {
-		return err
-	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
-	if !cfg.overwrite {
-		if _, err := os.Stat(name); err == nil {
-			return ErrFileExists
+	var buf bytes.Buffer
+	if err := copyLimited(&buf, resp.Body, c.maxBytes); err != nil {
+		return nil, fmt.Errorf("download: read response body: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+func (c *Client) File(ctx context.Context, rawURL, path string) (err error) {
+	if path == "" {
+		return fmt.Errorf("%w: empty path", ErrInvalidPath)
+	}
+	if !c.overwrite {
+		if _, err := os.Stat(path); err == nil {
+			return ErrExists
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("download: stat file: %w", err)
 		}
 	}
 
-	resp, err := openResponse(ctx, cfg, rawURL)
+	resp, err := c.open(ctx, rawURL)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		if closeErr := resp.Body.Close(); err == nil && closeErr != nil {
-			err = fmt.Errorf("close response body: %w", closeErr)
-		}
+		_ = resp.Body.Close()
 	}()
 
-	dir := filepath.Dir(name)
+	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create directory: %w", err)
+		return fmt.Errorf("download: create directory: %w", err)
 	}
 
-	tmpFile, err := os.CreateTemp(dir, filepath.Base(name)+".*.tmp")
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
 	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
+		return fmt.Errorf("download: create temp file: %w", err)
 	}
-	tmpPath := tmpFile.Name()
+	tmpPath := tmp.Name()
 	defer func() {
 		removeErr := os.Remove(tmpPath)
 		if err == nil && removeErr != nil && !os.IsNotExist(removeErr) {
-			err = fmt.Errorf("remove temp file: %w", removeErr)
+			err = fmt.Errorf("download: remove temp file: %w", removeErr)
 		}
 	}()
 
-	if copyErr := copyLimited(tmpFile, resp.Body, cfg.maxBytes); copyErr != nil {
-		if closeErr := tmpFile.Close(); closeErr != nil {
+	if err := copyLimited(tmp, resp.Body, c.maxBytes); err != nil {
+		closeErr := tmp.Close()
+		if closeErr != nil {
 			return errors.Join(
-				fmt.Errorf("write temp file: %w", copyErr),
-				fmt.Errorf("close temp file: %w", closeErr),
+				fmt.Errorf("download: write temp file: %w", err),
+				fmt.Errorf("download: close temp file: %w", closeErr),
 			)
 		}
-		return fmt.Errorf("write temp file: %w", copyErr)
+		return fmt.Errorf("download: write temp file: %w", err)
 	}
-	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("close temp file: %w", err)
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("download: close temp file: %w", err)
 	}
 
-	if cfg.overwrite {
-		if err := os.Rename(tmpPath, name); err != nil {
-			if removeErr := os.Remove(name); removeErr != nil && !os.IsNotExist(removeErr) {
-				return fmt.Errorf("remove existing file: %w", removeErr)
+	if c.overwrite {
+		if err := os.Rename(tmpPath, path); err != nil {
+			if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
+				return fmt.Errorf("download: remove existing file: %w", removeErr)
 			}
-			if renameErr := os.Rename(tmpPath, name); renameErr != nil {
-				return fmt.Errorf("rename temp file: %w", renameErr)
+			if renameErr := os.Rename(tmpPath, path); renameErr != nil {
+				return fmt.Errorf("download: rename temp file: %w", renameErr)
 			}
 		}
 		return nil
 	}
 
-	if err := os.Link(tmpPath, name); err != nil {
+	if err := os.Link(tmpPath, path); err != nil {
 		if os.IsExist(err) {
-			return ErrFileExists
+			return ErrExists
 		}
-		return fmt.Errorf("link temp file: %w", err)
+		return fmt.Errorf("download: link temp file: %w", err)
 	}
-
 	return nil
 }
 
-func GetBytes(ctx context.Context, rawURL string, opts ...Option) (data []byte, err error) {
+func (c *Client) open(ctx context.Context, rawURL string) (*http.Response, error) {
 	if ctx == nil {
 		ctx = context.Background()
-	}
-
-	cfg := newConfig(opts...)
-
-	if rawURL == "" {
-		return nil, ErrEmptyURL
 	}
 	if err := validateURL(rawURL); err != nil {
 		return nil, err
 	}
-
-	resp, err := openResponse(ctx, cfg, rawURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("download: create request: %w", err)
 	}
-	defer func() {
-		if closeErr := resp.Body.Close(); err == nil && closeErr != nil {
-			err = fmt.Errorf("close response body: %w", closeErr)
+	for key, values := range c.headers {
+		for _, value := range values {
+			req.Header.Add(key, value)
 		}
-	}()
-
-	data, err = readLimited(resp.Body, cfg.maxBytes)
+	}
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
+		return nil, fmt.Errorf("download: request: %w", err)
 	}
-
-	return data, nil
-}
-
-func newConfig(opts ...Option) *config {
-	client := *getDefaultClient()
-	cfg := &config{
-		client:   &client,
-		maxBytes: defaultMaxBytes,
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.CopyN(io.Discard, resp.Body, min(c.maxBytes, 4<<10))
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("%w: status=%q", ErrUnexpectedStatus, resp.Status)
 	}
-
-	for _, opt := range opts {
-		if opt == nil {
-			continue
-		}
-		opt(cfg)
-	}
-
-	return cfg
+	return resp, nil
 }
 
 func validateURL(rawURL string) error {
 	u, err := url.ParseRequestURI(rawURL)
-	if err != nil {
-		return fmt.Errorf("parse url: %w", err)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return fmt.Errorf("%w: url=%q", ErrInvalidURL, rawURL)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return ErrInvalidScheme
-	}
-	if u.Host == "" {
-		return ErrEmptyHost
+		return fmt.Errorf("%w: scheme=%q", ErrInvalidURL, u.Scheme)
 	}
 	return nil
-}
-
-func openResponse(ctx context.Context, cfg *config, rawURL string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	resp, err := cfg.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
-	}
-
-	if err := checkResponse(resp, cfg.maxBytes); err != nil {
-		if _, copyErr := io.Copy(io.Discard, io.LimitReader(resp.Body, cfg.maxBytes)); copyErr != nil {
-			if closeErr := resp.Body.Close(); closeErr != nil {
-				return nil, errors.Join(
-					fmt.Errorf("discard response body: %w", copyErr),
-					fmt.Errorf("close response body: %w", closeErr),
-				)
-			}
-			return nil, fmt.Errorf("discard response body: %w", copyErr)
-		}
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			return nil, errors.Join(err, fmt.Errorf("close response body: %w", closeErr))
-		}
-		return nil, err
-	}
-
-	return resp, nil
-}
-
-func defaultTransport() *http.Transport {
-	if transport, ok := http.DefaultTransport.(*http.Transport); ok {
-		clone := transport.Clone()
-		clone.MaxIdleConnsPerHost = 100
-		return clone
-	}
-	return &http.Transport{MaxIdleConnsPerHost: 100}
-}
-
-func checkResponse(resp *http.Response, maxBytes int64) error {
-	if resp.StatusCode != http.StatusOK {
-		return ErrUnexpectedStatus
-	}
-	if resp.ContentLength > 0 && resp.ContentLength > maxBytes {
-		return ErrResponseBodyTooLarge
-	}
-	return nil
-}
-
-func readLimited(r io.Reader, maxBytes int64) ([]byte, error) {
-	lr := io.LimitReader(r, maxBytes+1)
-	data, err := io.ReadAll(lr)
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(data)) > maxBytes {
-		return nil, ErrResponseBodyTooLarge
-	}
-	return data, nil
 }
 
 func copyLimited(dst io.Writer, src io.Reader, maxBytes int64) error {
-	lr := io.LimitReader(src, maxBytes+1)
-	n, err := io.Copy(dst, lr)
+	limited := &io.LimitedReader{R: src, N: maxBytes + 1}
+	n, err := io.Copy(dst, limited)
 	if err != nil {
 		return err
 	}
 	if n > maxBytes {
-		return ErrResponseBodyTooLarge
+		return ErrTooLarge
 	}
 	return nil
+}
+
+func defaultTransport() *http.Transport {
+	if transport, ok := http.DefaultTransport.(*http.Transport); ok {
+		return transport.Clone()
+	}
+	return &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 }

@@ -5,8 +5,8 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/onnttf/kit.svg)](https://pkg.go.dev/github.com/onnttf/kit)
 
 `kit` is a small collection of Go utility packages for application code. It
-focuses on practical helpers for concurrency, database access, Excel files,
-HTTP downloads, DingTalk robots, trees, slices, pointers, and calendar ranges.
+focuses on practical helpers for task execution, Excel files, HTTP downloads,
+DingTalk robots, trees, slices, pointers, and calendar ranges.
 
 
 ## Getting Started
@@ -23,23 +23,23 @@ import "github.com/onnttf/kit/tree"
 
 ## Packages
 
-| Package      | Purpose                                                                                       |
-| ------------ | --------------------------------------------------------------------------------------------- |
-| `concurrent` | Run bounded concurrent work with retry, backoff, timeout, panic policy, and result summaries. |
-| `container`  | Generic slice helpers such as difference, intersection, union, grouping, and partitioning.    |
-| `dal`        | Generic GORM repository operations and reusable query scopes.                                 |
-| `dingtalk`   | Build and send DingTalk robot messages.                                                       |
-| `download`   | Download HTTP resources as files or byte slices with size limits and atomic file writes.      |
-| `excel`      | Read Excel workbooks and parse rows into structs with `excel` tags.                           |
-| `ptr`        | Create and dereference pointers safely.                                                       |
-| `time`       | Compute day, week, month, and year boundaries.                                                |
-| `tree`       | Build, validate, query, transform, filter, and flatten typed trees.                           |
+| Package    | Purpose                                                                                  |
+| ---------- | ---------------------------------------------------------------------------------------- |
+| `dingtalk` | Build and send DingTalk robot messages with explicit request context.                    |
+| `download` | Download HTTP resources as files or byte slices with clients, size limits, and headers.  |
+| `excel`    | Read Excel workbooks, stream sheet rows, and decode rows into structs with `excel` tags. |
+| `fsm`      | Run a small concurrency-safe finite state machine.                                       |
+| `ptr`      | Create and dereference pointers safely.                                                  |
+| `slicex`   | Slice helpers that add behavior beyond the standard library.                             |
+| `task`     | Run in-memory tasks concurrently and collect ordered item results.                       |
+| `timex`    | Compute half-open calendar ranges and start/end boundaries.                              |
+| `tree`     | Build, edit, validate, query, and snapshot typed trees.                                  |
 
 ## Contributing
 
 ### Prerequisites
 
-- Go 1.23 or newer
+- Go 1.25 or newer
 - `golangci-lint` for lint checks
 
 ### Setup

@@ -1,310 +1,282 @@
 package tree
 
 import (
+	"errors"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestTree_Walk_Level(t *testing.T) {
-	b := NewBuilder[TestItem, int]()
-	b.KeyBy(keyFn).ParentBy(parentFn).WithItems([]TestItem{
-		{ID: 1, Name: "Root"},
-		{ID: 2, Name: "Child1", ParentID: 1},
-		{ID: 3, Name: "Child2", ParentID: 1},
-		{ID: 4, Name: "Grandchild", ParentID: 2},
-	})
-	tree, err := b.Build()
-	require.NoError(t, err)
-
-	var levels []int
-	ok, err := tree.Walk(func(n *Node[TestItem], _ *Node[TestItem]) bool {
-		levels = append(levels, n.Level)
-		return true
-	})
-	require.NoError(t, err)
-	assert.True(t, ok)
-
-	assert.Equal(t, []int{1, 2, 3, 2}, levels)
+type item struct {
+	ID     int
+	Parent int
+	Name   string
+	Sort   int
 }
 
-func TestBuilder_Build_SetsNodeLevel(t *testing.T) {
-	b := NewBuilder[TestItem, int]()
-	b.KeyBy(keyFn).ParentBy(parentFn).WithItems([]TestItem{
-		{ID: 1, Name: "Root"},
-		{ID: 2, Name: "Child1", ParentID: 1},
-		{ID: 3, Name: "Child2", ParentID: 1},
-		{ID: 4, Name: "Grandchild", ParentID: 2},
-	})
-	tree, err := b.Build()
-	require.NoError(t, err)
+func TestBuildAndQuery(t *testing.T) {
+	tr, err := testBuilder().Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
 
-	roots := tree.Roots()
-	require.Len(t, roots, 1)
-	assert.Equal(t, 1, roots[0].Level)
-	assert.Equal(t, 2, roots[0].Children[0].Level)
-	assert.Equal(t, 2, roots[0].Children[1].Level)
-	assert.Equal(t, 3, roots[0].Children[0].Children[0].Level)
+	roots := tr.Roots()
+	if len(roots) != 1 || roots[0].Key != 1 {
+		t.Fatalf("Roots() = %+v", roots)
+	}
+
+	node, ok := tr.Get(2)
+	if !ok || node.Key != 2 || node.Parent == nil || *node.Parent != 1 || node.Depth != 1 {
+		t.Fatalf("Get(2) = %+v, %v", node, ok)
+	}
+
+	children, ok := tr.Children(1)
+	if !ok || keys(children) != "3,2" {
+		t.Fatalf("Children(1) = %+v, %v", children, ok)
+	}
 }
 
-func TestTree_Walk_Parent(t *testing.T) {
-	b := NewBuilder[TestItem, int]()
-	b.KeyBy(keyFn).ParentBy(parentFn).WithItems([]TestItem{
-		{ID: 1, Name: "Root"},
-		{ID: 2, Name: "Child", ParentID: 1},
-		{ID: 3, Name: "Grandchild", ParentID: 2},
-	})
-	tree, err := b.Build()
-	require.NoError(t, err)
+func TestBuildAllowsParentAfterChildAndKeepsInputOrder(t *testing.T) {
+	tr, err := NewBuilder[item, int]().
+		KeyBy(func(v item) int { return v.ID }).
+		ParentBy(func(v item) (int, bool) { return v.Parent, v.Parent != 0 }).
+		Add(
+			item{ID: 2, Parent: 1, Name: "child b"},
+			item{ID: 3, Parent: 1, Name: "child a"},
+			item{ID: 1, Name: "root"},
+		).
+		Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
 
-	var parentNames []string
-	ok, err := tree.Walk(func(_ *Node[TestItem], parent *Node[TestItem]) bool {
-		if parent == nil {
-			parentNames = append(parentNames, "")
-		} else {
-			parentNames = append(parentNames, parent.Item.Name)
-		}
-		return true
-	})
-	require.NoError(t, err)
-	assert.True(t, ok)
-
-	assert.Equal(t, []string{"", "Root", "Child"}, parentNames)
+	children, ok := tr.Children(1)
+	if !ok || keys(children) != "2,3" {
+		t.Fatalf("Children(1) = %+v, %v", children, ok)
+	}
 }
 
-func TestTree_Walk_Stop(t *testing.T) {
-	b := NewBuilder[TestItem, int]()
-	b.KeyBy(keyFn).WithItems([]TestItem{
-		{ID: 1, Name: "A"},
-		{ID: 2, Name: "B"},
-		{ID: 3, Name: "C"},
-	})
-	tree, err := b.Build()
-	require.NoError(t, err)
+func TestBuilderPendingEdits(t *testing.T) {
+	tr, err := testBuilder().
+		Update(2, func(v *item) { v.Name = "changed" }).
+		Move(3, 2).
+		Remove(4).
+		Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
 
-	var names []string
-	stopped, err := tree.Walk(func(n *Node[TestItem], _ *Node[TestItem]) bool {
-		names = append(names, n.Item.Name)
-		return n.Item.Name != "B"
-	})
-	require.NoError(t, err)
-	assert.False(t, stopped)
-
-	assert.Equal(t, []string{"A", "B"}, names)
+	node, _ := tr.Get(2)
+	if node.Value.Name != "changed" {
+		t.Fatalf("updated value = %+v", node.Value)
+	}
+	children, _ := tr.Children(2)
+	if len(children) != 1 || children[0].Key != 3 {
+		t.Fatalf("Children(2) = %+v", children)
+	}
+	if _, ok := tr.Get(4); ok {
+		t.Fatalf("removed key still exists")
+	}
 }
 
-func TestTree_Walk_ClonePreservesLevel(t *testing.T) {
-	b := NewBuilder[TestItem, int]()
-	b.KeyBy(keyFn).ParentBy(parentFn).WithItems([]TestItem{
-		{ID: 1, Name: "Root"},
-		{ID: 2, Name: "Child", ParentID: 1},
-	})
-	tree, err := b.Build()
-	require.NoError(t, err)
+func TestBuildValidationErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		b    *Builder[item, int]
+		want error
+	}{
+		{
+			name: "missing key function",
+			b:    NewBuilder[item, int]().Add(item{ID: 1}),
+			want: ErrKeyNotSet,
+		},
+		{
+			name: "duplicate key",
+			b: NewBuilder[item, int]().
+				KeyBy(func(v item) int { return v.ID }).
+				Add(item{ID: 1}, item{ID: 1}),
+			want: ErrDuplicateKey,
+		},
+		{
+			name: "missing parent",
+			b: NewBuilder[item, int]().
+				KeyBy(func(v item) int { return v.ID }).
+				ParentBy(func(v item) (int, bool) { return v.Parent, v.Parent != 0 }).
+				Add(item{ID: 1, Parent: 9}),
+			want: ErrMissingParent,
+		},
+		{
+			name: "move cycle",
+			b:    testBuilder().Move(1, 4),
+			want: ErrCycle,
+		},
+		{
+			name: "update missing",
+			b:    testBuilder().Update(99, func(*item) {}),
+			want: ErrKeyNotFound,
+		},
+		{
+			name: "update nil function",
+			b:    testBuilder().Update(1, nil),
+			want: ErrInvalidInput,
+		},
+		{
+			name: "remove missing",
+			b:    testBuilder().Remove(99),
+			want: ErrKeyNotFound,
+		},
+		{
+			name: "move missing key",
+			b:    testBuilder().Move(99, 1),
+			want: ErrKeyNotFound,
+		},
+		{
+			name: "move missing parent",
+			b:    testBuilder().Move(2, 99),
+			want: ErrMissingParent,
+		},
+		{
+			name: "move self parent",
+			b:    testBuilder().Move(2, 2),
+			want: ErrCycle,
+		},
+	}
 
-	_, err = tree.Walk(func(*Node[TestItem], *Node[TestItem]) bool {
-		return true
-	})
-	require.NoError(t, err)
-
-	cloned := tree.Clone()
-	var levels []int
-	_, err = cloned.Walk(func(n *Node[TestItem], _ *Node[TestItem]) bool {
-		levels = append(levels, n.Level)
-		return true
-	})
-	require.NoError(t, err)
-
-	assert.Equal(t, []int{1, 2}, levels)
-}
-
-func TestTree_CloneIndexesClonedNodes(t *testing.T) {
-	b := NewBuilder[TestItem, int]()
-	b.KeyBy(keyFn).ParentBy(parentFn).WithItems([]TestItem{
-		{ID: 1, Name: "Root"},
-		{ID: 2, Name: "Child", ParentID: 1},
-	})
-	tree, err := b.Build()
-	require.NoError(t, err)
-
-	cloned := tree.Clone()
-	cloned.cache[1].Item.Name = "Changed"
-
-	roots := cloned.Roots()
-	require.Len(t, roots, 1)
-	assert.Equal(t, "Changed", roots[0].Item.Name)
-
-	original, ok := tree.Get(1)
-	require.True(t, ok)
-	assert.Equal(t, "Root", original.Item.Name)
-}
-
-func TestTree_Map_PreservesLevel(t *testing.T) {
-	b := NewBuilder[TestItem, int]()
-	b.KeyBy(keyFn).ParentBy(parentFn).WithItems([]TestItem{
-		{ID: 1, Name: "Root"},
-		{ID: 2, Name: "Child", ParentID: 1},
-	})
-	tree, err := b.Build()
-	require.NoError(t, err)
-
-	mapped, err := tree.Map(func(c TestItem) TestItem { return c }, func(c TestItem) int { return c.ID })
-	require.NoError(t, err)
-
-	assert.Len(t, mapped.Roots(), 1)
-	assert.Equal(t, 1, mapped.Roots()[0].Level)
-	assert.Equal(t, 2, mapped.Roots()[0].Children[0].Level)
-}
-
-func TestTree_Map_RebuildsParentIndex(t *testing.T) {
-	b := NewBuilder[TestItem, int]()
-	b.KeyBy(keyFn).ParentBy(parentFn).WithItems([]TestItem{
-		{ID: 1, Name: "Root"},
-		{ID: 2, Name: "Child", ParentID: 1},
-	})
-	tree, err := b.Build()
-	require.NoError(t, err)
-
-	mapped, err := tree.Map(func(item TestItem) TestItem {
-		item.ID += 10
-		return item
-	}, keyFn)
-	require.NoError(t, err)
-
-	parent, ok := mapped.ParentOf(12)
-	require.True(t, ok)
-	assert.Equal(t, 11, parent)
-}
-
-func TestTree_Map_NilCallbacks(t *testing.T) {
-	b := NewBuilder[TestItem, int]().KeyBy(keyFn).WithItems([]TestItem{{ID: 1}})
-	tree, err := b.Build()
-	require.NoError(t, err)
-
-	_, err = tree.Map(nil, keyFn)
-	assert.ErrorIs(t, err, ErrNilCallback)
-
-	_, err = tree.Map(func(item TestItem) TestItem { return item }, nil)
-	assert.ErrorIs(t, err, ErrNilCallback)
-}
-
-func TestTree_Filter_RebuildsConsistentTree(t *testing.T) {
-	b := NewBuilder[TestItem, int]()
-	b.KeyBy(keyFn).ParentBy(parentFn).WithItems([]TestItem{
-		{ID: 1, Name: "Root"},
-		{ID: 2, Name: "KeepChild", ParentID: 1},
-		{ID: 3, Name: "DropChild", ParentID: 1},
-		{ID: 4, Name: "KeepGrandchild", ParentID: 3},
-	})
-	tree, err := b.Build()
-	require.NoError(t, err)
-
-	filtered, err := tree.Filter(func(node *Node[TestItem]) bool {
-		return node.Item.ID == 2 || node.Item.ID == 4
-	})
-	require.NoError(t, err)
-
-	assert.Equal(t, 2, filtered.Len())
-	assert.True(t, filtered.ContainsKey(2))
-	assert.True(t, filtered.ContainsKey(4))
-	assert.False(t, filtered.ContainsKey(1))
-	_, ok := filtered.ParentOf(4)
-	assert.False(t, ok)
-
-	roots := filtered.Roots()
-	require.Len(t, roots, 2)
-	assert.Equal(t, []int{2, 4}, []int{roots[0].Item.ID, roots[1].Item.ID})
-}
-
-func TestTree_PathTo(t *testing.T) {
-	b := NewBuilder[TestItem, int]()
-	b.KeyBy(keyFn).ParentBy(parentFn).WithItems([]TestItem{
-		{ID: 1, Name: "Root"},
-		{ID: 2, Name: "Child", ParentID: 1},
-		{ID: 3, Name: "Grandchild", ParentID: 2},
-	})
-	tree, err := b.Build()
-	require.NoError(t, err)
-
-	path, ok := tree.PathTo(3)
-	require.True(t, ok)
-	assert.Equal(t, []int{1, 2, 3}, []int{path[0].Item.ID, path[1].Item.ID, path[2].Item.ID})
-
-	_, ok = tree.PathTo(999)
-	assert.False(t, ok)
-}
-
-func TestTree_Descendants(t *testing.T) {
-	b := NewBuilder[TestItem, int]()
-	b.KeyBy(keyFn).ParentBy(parentFn).WithItems([]TestItem{
-		{ID: 1, Name: "Root"},
-		{ID: 2, Name: "Child", ParentID: 1},
-		{ID: 3, Name: "Grandchild", ParentID: 2},
-		{ID: 4, Name: "Sibling", ParentID: 1},
-	})
-	tree, err := b.Build()
-	require.NoError(t, err)
-
-	descendants, ok := tree.Descendants(1)
-	require.True(t, ok)
-	assert.Equal(t, []int{2, 3, 4}, []int{
-		descendants[0].Item.ID,
-		descendants[1].Item.ID,
-		descendants[2].Item.ID,
-	})
-
-	descendants, ok = tree.Descendants(4)
-	require.True(t, ok)
-	assert.Empty(t, descendants)
-
-	_, ok = tree.Descendants(999)
-	assert.False(t, ok)
-}
-
-func TestTree_Subtree_SetsRootLevel(t *testing.T) {
-	b := NewBuilder[TestItem, int]()
-	b.KeyBy(keyFn).ParentBy(parentFn).WithItems([]TestItem{
-		{ID: 1, Name: "Root"},
-		{ID: 2, Name: "Child", ParentID: 1},
-		{ID: 3, Name: "Grandchild", ParentID: 2},
-	})
-	tree, err := b.Build()
-	require.NoError(t, err)
-
-	subtree, ok := tree.Subtree(2)
-	require.True(t, ok)
-	assert.Len(t, subtree.Roots(), 1)
-	assert.Equal(t, 1, subtree.Roots()[0].Level)
-	assert.Equal(t, 2, subtree.Roots()[0].Children[0].Level)
-}
-
-func TestTree_Subtree_ConcurrentReaders(t *testing.T) {
-	b := NewBuilder[TestItem, int]()
-	b.KeyBy(keyFn).ParentBy(parentFn).WithItems([]TestItem{
-		{ID: 1, Name: "Root"},
-		{ID: 2, Name: "Child", ParentID: 1},
-		{ID: 3, Name: "Grandchild", ParentID: 2},
-	})
-	tree, err := b.Build()
-	require.NoError(t, err)
-
-	var wg sync.WaitGroup
-	errCh := make(chan error, 25)
-	for range 25 {
-		wg.Go(func() {
-			subtree, ok := tree.Subtree(2)
-			if !ok {
-				errCh <- assert.AnError
-				return
-			}
-			if subtree.Len() != 2 {
-				errCh <- assert.AnError
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tt.b.Build()
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("Build() error = %v, want %v", err, tt.want)
 			}
 		})
 	}
+}
+
+func TestClonedViews(t *testing.T) {
+	tr, err := testBuilder().Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	roots := tr.Roots()
+	roots[0].Value.Name = "mutated"
+	roots[0].Children = nil
+
+	root, _ := tr.Get(1)
+	if root.Value.Name == "mutated" || len(root.Children) == 0 {
+		t.Fatalf("query leaked mutable internals: %+v", root)
+	}
+
+	_, err = tr.Walk(func(node Node[item, int], parent *Node[item, int]) bool {
+		node.Value.Name = "walk-mutated"
+		if node.Key == 2 && (parent == nil || parent.Key != 1) {
+			t.Fatalf("parent for node 2 = %+v", parent)
+		}
+		return true
+	})
+	if err != nil {
+		t.Fatalf("Walk() error = %v", err)
+	}
+	root, _ = tr.Get(1)
+	if root.Value.Name == "walk-mutated" {
+		t.Fatalf("walk leaked mutable internals")
+	}
+}
+
+func TestBuilderClone(t *testing.T) {
+	b := testBuilder()
+	clone := b.Clone().Add(item{ID: 9, Parent: 99})
+	if errs := clone.Validate(); len(errs) == 0 {
+		t.Fatalf("Validate() expected missing parent for cloned builder addition")
+	}
+
+	if _, err := b.Build(); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+}
+
+func TestNilAndMissingQueries(t *testing.T) {
+	var tr *Tree[item, int]
+	if _, ok := tr.Get(1); ok {
+		t.Fatalf("nil Get() ok = true")
+	}
+	if got := tr.Roots(); got != nil {
+		t.Fatalf("nil Roots() = %v", got)
+	}
+	if _, ok := tr.Children(1); ok {
+		t.Fatalf("nil Children() ok = true")
+	}
+	ok, err := tr.Walk(func(Node[item, int], *Node[item, int]) bool {
+		return true
+	})
+	if !ok || err != nil {
+		t.Fatalf("nil Walk() = %v, %v", ok, err)
+	}
+
+	tr, err = testBuilder().Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if _, ok := tr.Get(99); ok {
+		t.Fatalf("Get(missing) ok = true")
+	}
+	if _, ok := tr.Children(99); ok {
+		t.Fatalf("Children(missing) ok = true")
+	}
+	if _, err := tr.Walk(nil); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("Walk(nil) error = %v", err)
+	}
+}
+
+func TestRemoveSubtree(t *testing.T) {
+	tr, err := testBuilder().Remove(2).Build()
+	if err != nil {
+		t.Fatalf("Build(remove subtree) error = %v", err)
+	}
+	if _, ok := tr.Get(2); ok {
+		t.Fatalf("removed key 2 still exists")
+	}
+	if _, ok := tr.Get(4); ok {
+		t.Fatalf("removed child key 4 still exists")
+	}
+}
+
+func TestTreeConcurrentReaders(t *testing.T) {
+	tr, err := testBuilder().Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	var wg sync.WaitGroup
+	for range 50 {
+		wg.Go(func() {
+			_, _ = tr.Get(2)
+			_, _ = tr.Children(1)
+			_ = tr.Roots()
+			_, _ = tr.Walk(func(Node[item, int], *Node[item, int]) bool { return true })
+		})
+	}
 	wg.Wait()
-	close(errCh)
-	assert.Empty(t, errCh)
+}
+
+func testBuilder() *Builder[item, int] {
+	return NewBuilder[item, int]().
+		KeyBy(func(v item) int { return v.ID }).
+		ParentBy(func(v item) (int, bool) { return v.Parent, v.Parent != 0 }).
+		SortFunc(func(a, b item) int { return a.Sort - b.Sort }).
+		Add(
+			item{ID: 1, Name: "root", Sort: 1},
+			item{ID: 2, Parent: 1, Name: "child b", Sort: 2},
+			item{ID: 3, Parent: 1, Name: "child a", Sort: 1},
+			item{ID: 4, Parent: 2, Name: "leaf", Sort: 1},
+		)
+}
+
+func keys(nodes []Node[item, int]) string {
+	parts := make([]string, 0, len(nodes))
+	for _, n := range nodes {
+		parts = append(parts, strconv.Itoa(n.Key))
+	}
+	return strings.Join(parts, ",")
 }

@@ -5,25 +5,17 @@ func To[T any](v T) *T {
 	return &val
 }
 
-func DerefOr[T any](p *T, defaultVal T) T {
+func Value[T any](p *T) T {
+	var zero T
 	if p == nil {
-		return defaultVal
+		return zero
 	}
 	return *p
 }
 
-func ToIf[T any](cond bool, v T) *T {
-	if cond {
-		return To(v)
+func Or[T any](p *T, fallback T) T {
+	if p == nil {
+		return fallback
 	}
-	return nil
-}
-
-func Zero[T any]() *T {
-	return new(T)
-}
-
-func Deref[T any](p *T) T {
-	var zero T
-	return DerefOr(p, zero)
+	return *p
 }
