@@ -1,0 +1,21 @@
+tree/tree.go
+  s_83643a1e2d3ffa::t_77632be217af18 4,8-24,298-300,302-311,313,316-317,319,321,324-326,328-329
+tree/builder.go
+  s_83643a1e2d3ffa::t_77632be217af18 3-7,228-338
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "82cb09b75a3a172c62a34c800aee3d1b5c78fb0d",
+  "prompts": {},
+  "sessions": {
+    "s_83643a1e2d3ffa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3560-4c76-7ca2-93df-f8d452b60fd8",
+        "model": "gpt-5.5"
+      },
+      "human_author": "ZHANG PENG <onnttf@gmail.com>"
+    }
+  }
+}
