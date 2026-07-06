@@ -1,0 +1,19 @@
+excel/excel_more_test.go
+  s_850b187393a3df::t_b94d2e0cb3685a 1-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6f71a35d6df9a2b4be3f46a20751a507d7d51d32",
+  "prompts": {},
+  "sessions": {
+    "s_850b187393a3df": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "019f359a-a34f-7afa-ab17-6236b6ba5845",
+        "model": "gpt-5.5"
+      },
+      "human_author": "ZHANG PENG <onnttf@gmail.com>"
+    }
+  }
+}
