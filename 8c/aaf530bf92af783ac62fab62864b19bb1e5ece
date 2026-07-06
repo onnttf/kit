@@ -1,0 +1,64 @@
+gormx/scopes_test.go
+  s_83643a1e2d3ffa::t_4a0c0cf468e96a 79-98
+timex/timex_test.go
+  s_83643a1e2d3ffa::t_4a0c0cf468e96a 34-88,90-91
+download/download.go
+  s_83643a1e2d3ffa::t_98714ef6179a24 223,226
+  s_83643a1e2d3ffa::t_99c41d2f973d84 117,142,147,153,160-163,165,168,174,177,187,201,210
+  s_83643a1e2d3ffa::t_0273039b6f8fd8 106,112,115,137,215
+task/task.go
+  s_83643a1e2d3ffa::t_0273039b6f8fd8 134
+dingtalk/dingtalk_test.go
+  s_83643a1e2d3ffa::t_4a0c0cf468e96a 9,12,77-245
+fsm/fsm_test.go
+  s_83643a1e2d3ffa::t_4a0c0cf468e96a 58-126
+tree/tree.go
+  s_83643a1e2d3ffa::t_7e515ceae1e13a 26-27,89-90
+dingtalk/client.go
+  s_83643a1e2d3ffa::t_0273039b6f8fd8 107
+  s_83643a1e2d3ffa::t_5a93bf9c6d5824 106,108
+  s_83643a1e2d3ffa::t_99c41d2f973d84 98,104,120,153
+  s_83643a1e2d3ffa::t_8d228e5b13e4e1 112,123
+tree/builder.go
+  s_83643a1e2d3ffa::t_5a93bf9c6d5824 25,59,64,69,74-75,121,129-135,137-139,143-145,148-158,160-165,169-172,175-176,178-179,181,183-185
+  s_83643a1e2d3ffa::t_f15dd4533b60d4 51
+  s_83643a1e2d3ffa::t_98714ef6179a24 136,146,173,177,180,229,236,247,250
+  s_83643a1e2d3ffa::t_99c41d2f973d84 53
+tree/tree_test.go
+  s_83643a1e2d3ffa::t_dc608b4a479780 71,78,86,169
+  s_83643a1e2d3ffa::t_5b7c407e9b1505 5-6
+  s_83643a1e2d3ffa::t_4a0c0cf468e96a 172,177-178,180-185,187-196,198-199,207-208,212-219,222,224,228
+  s_83643a1e2d3ffa::t_00e0c2e970e8e4 24-26,35,49,58,94-123,153-155,167,174,179,197,201-202,204-205,226-227,229-230,246,257-262,266,268,270
+  s_83643a1e2d3ffa::t_e287eddc9f425e 168
+  s_83643a1e2d3ffa::t_fe66edd7f0832a 170-171
+  s_83643a1e2d3ffa::t_7e616f56140d3d 173
+excel/excel_test.go
+  s_83643a1e2d3ffa::t_4a0c0cf468e96a 134-245
+  s_83643a1e2d3ffa::t_5a93bf9c6d5824 23,69-70,87,93,104-107,114-133
+task/task_test.go
+  s_83643a1e2d3ffa::t_4a0c0cf468e96a 7,64-144
+excel/excel.go
+  s_83643a1e2d3ffa::t_98714ef6179a24 229
+  s_83643a1e2d3ffa::t_99c41d2f973d84 36,44,56,81-84,109-113,125,129,137,144-147
+  s_83643a1e2d3ffa::t_0273039b6f8fd8 175,248,305
+download/download_test.go
+  s_83643a1e2d3ffa::t_4a0c0cf468e96a 6-7,12,84-190
+slicex/slicex_test.go
+  s_83643a1e2d3ffa::t_4a0c0cf468e96a 69-156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8caaf530bf92af783ac62fab62864b19bb1e5ece",
+  "prompts": {},
+  "sessions": {
+    "s_83643a1e2d3ffa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3560-4c76-7ca2-93df-f8d452b60fd8",
+        "model": "gpt-5.5"
+      },
+      "human_author": "ZHANG PENG <onnttf@gmail.com>"
+    }
+  }
+}
