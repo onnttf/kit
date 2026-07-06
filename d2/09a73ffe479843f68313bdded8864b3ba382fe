@@ -1,0 +1,22 @@
+gormx/scopes_test.go
+  s_83643a1e2d3ffa::t_c5aa82da7d7bb1 26,29,37-56,58-59
+  s_83643a1e2d3ffa::t_055fa381eeceff 57
+gormx/scopes.go
+  s_83643a1e2d3ffa::t_c5aa82da7d7bb1 56,62-63,69-70,76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d209a73ffe479843f68313bdded8864b3ba382fe",
+  "prompts": {},
+  "sessions": {
+    "s_83643a1e2d3ffa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3560-4c76-7ca2-93df-f8d452b60fd8",
+        "model": "gpt-5.5"
+      },
+      "human_author": "ZHANG PENG <onnttf@gmail.com>"
+    }
+  }
+}
